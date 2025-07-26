@@ -1,4 +1,4 @@
-# low_cost_robot_description
+# koch_description
 
 ## About
 - This `ROS 2` package is for the URDF of the robot arm (follower).
@@ -6,19 +6,19 @@
 
 ## Usage
 The usage 1. and 2. are mainly generated using [`fusion2urdf-ros2`](https://github.com/dheena2k2/fusion2urdf-ros2/tree/8e883d2d66529a77c67edc28d29f2c3ba96169f6) (commit 8e883d2).
-1. Show the `low_cost_robot` robot arm (follower) in `RViz`:
+1. Show the `koch` robot arm (follower) in `RViz`:
     ```shell
-    ros2 launch low_cost_robot_description display.launch.py
+    ros2 launch koch_description display.launch.py
     ```
     ![usage_rviz](./pictures/usage_rviz.png)
 
-2. Show the `low_cost_robot` robot arm (follower) in `Gazebo`:
+2. Show the `koch` robot arm (follower) in `Gazebo`:
     ```shell
-    ros2 launch low_cost_robot_description gazebo.launch.py
+    ros2 launch koch_description gazebo.launch.py
     ```
     ![usage_gazebo](./pictures/usage_gazebo.png)
 
-3. The `URDF` file `low_cost_robot.urdf` is located at `ros2_ws/src/low_cost_robot_description/urdf/low_cost_robot.urdf`.
+3. The `URDF` file `koch.urdf` is located at `ros2_ws/src/koch_description/urdf/koch.urdf`.
 
 
 - >### Known Issue:
@@ -37,7 +37,7 @@ The usage 1. and 2. are mainly generated using [`fusion2urdf-ros2`](https://gith
    > # Replace "humble" with your ROS 2 distribution if you're not using "ROS 2 Humble Hawksbill"
    > source /opt/ros/humble/setup.bash
    >
-   > # Assume the current directory is `low_cost_robot`
+   > # Assume the current directory is `koch`
    > cd ros2_ws
    >
    > # Replace ".bash" with your shell if you're not using bash

@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'low_cost_robot_description'
+package_name = 'koch_description'
 
 setup(
     name=package_name,

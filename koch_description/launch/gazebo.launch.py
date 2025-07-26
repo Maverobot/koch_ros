@@ -7,9 +7,9 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    share_dir = get_package_share_directory("low_cost_robot_description")
+    share_dir = get_package_share_directory("koch_description")
 
-    xacro_file = os.path.join(share_dir, "urdf", "low_cost_robot.xacro")
+    xacro_file = os.path.join(share_dir, "urdf", "koch.xacro")
     robot_description_config = xacro.process_file(xacro_file)
     robot_urdf = robot_description_config.toxml()
 
@@ -28,7 +28,7 @@ def generate_launch_description():
         name="joint_state_publisher",
     )
 
-    # Launch Gazebo Sim (Ignition/GZ)
+    # # Launch Gazebo Sim (Ignition/GZ)
     gazebo_sim = ExecuteProcess(cmd=["gz", "sim", "-r", "--verbose"], output="screen")
 
     # Spawn robot into simulation using ros_gz_sim
@@ -37,7 +37,7 @@ def generate_launch_description():
         executable="create",
         arguments=[
             "-name",
-            "low_cost_robot",
+            "koch",
             "-topic",
             "robot_description",
         ],

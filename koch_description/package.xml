@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-<name>low_cost_robot_description</name>
+<name>koch_description</name>
   <version>0.0.0</version>
-<description>The low_cost_robot_description package</description>
+<description>The koch_description package</description>
   <maintainer email="todo@todo.com">author</maintainer>
   <license>TODO: License declaration</license>
 

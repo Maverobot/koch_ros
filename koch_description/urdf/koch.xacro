@@ -1,9 +1,9 @@
 <?xml version="1.0" ?>
-<robot name="low_cost_robot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+<robot name="koch" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-<xacro:include filename="$(find low_cost_robot_description)/urdf/materials.xacro" />
-<xacro:include filename="$(find low_cost_robot_description)/urdf/low_cost_robot.trans" />
-<xacro:include filename="$(find low_cost_robot_description)/urdf/low_cost_robot.gazebo" />
+<xacro:include filename="$(find koch_description)/urdf/materials.xacro" />
+<xacro:include filename="$(find koch_description)/urdf/koch.trans" />
+<xacro:include filename="$(find koch_description)/urdf/koch.gazebo" />
 <link name="base_link">
   <inertial>
     <origin xyz="-0.00017023202404845418 -0.021341439639662032 0.014423161616418092" rpy="0 0 0"/>
@@ -13,14 +13,14 @@
   <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
@@ -34,14 +34,14 @@
   <visual>
     <origin xyz="-0.0 -0.0 -0.039" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link1_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link1_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="-0.0 -0.0 -0.039" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link1_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link1_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
@@ -55,14 +55,14 @@
   <visual>
     <origin xyz="0.0002 0.0 -0.0563" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link2_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link2_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="0.0002 0.0 -0.0563" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link2_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link2_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
@@ -76,14 +76,14 @@
   <visual>
     <origin xyz="-5e-05 -0.014791 -0.164647" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link3_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link3_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="-5e-05 -0.014791 -0.164647" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link3_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link3_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
@@ -97,14 +97,14 @@
   <visual>
     <origin xyz="-0.000175 -0.105258 -0.167394" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link4_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link4_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="-0.000175 -0.105258 -0.167394" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/link4_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/link4_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
@@ -118,14 +118,14 @@
   <visual>
     <origin xyz="-0.001528 -0.105265 -0.122394" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/gripper_static_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/gripper_static_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="-0.001528 -0.105265 -0.122394" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/gripper_static_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/gripper_static_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
@@ -139,14 +139,14 @@
   <visual>
     <origin xyz="0.005872 -0.105015 -0.109244" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/gripper_moving_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/gripper_moving_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
     <origin xyz="0.005872 -0.105015 -0.109244" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="file://$(find low_cost_robot_description)/meshes/gripper_moving_1.stl" scale="0.001 0.001 0.001"/>
+      <mesh filename="file://$(find koch_description)/meshes/gripper_moving_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
   </collision>
 </link>
