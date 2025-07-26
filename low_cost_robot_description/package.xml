@@ -9,7 +9,7 @@
 
   <depend>xacro</depend>
   <depend>rviz2</depend>
-  <depend>gazebo_ros</depend>
+  <depend>ros_gz_sim</depend>
   <depend>robot_state_publisher</depend>
   <depend>joint_state_publisher</depend>
   <depend>joint_state_publisher_gui</depend>
