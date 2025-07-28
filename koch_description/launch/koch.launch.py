@@ -2,8 +2,10 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.substitutions import LaunchConfiguration
 
 import xacro
 
@@ -19,8 +21,15 @@ def generate_launch_description():
     controller_config = os.path.join(share_dir, "config", "controllers.yaml")
     print(f"Loading controller config from: {controller_config}")
 
-    return LaunchDescription(
-        [
+    # Declare a launch argument to decide whether to launch RViz
+    rviz_arg = DeclareLaunchArgument(
+        "rviz", default_value="true", description="Flag to enable RViz"
+    )
+
+    # Function to conditionally include RViz node
+    def launch_setup(context, *args, **kwargs):
+        use_rviz = LaunchConfiguration("rviz").perform(context) == "true"
+        nodes = [
             Node(
                 package="controller_manager",
                 executable="ros2_control_node",
@@ -53,12 +62,19 @@ def generate_launch_description():
                 parameters=[{"robot_description": robot_description_config.toxml()}],
                 output="screen",
             ),
-            Node(
-                package="rviz2",
-                executable="rviz2",
-                name="rviz2",
-                arguments=["-d", rviz_config],
-                output="screen",
-            ),
         ]
-    )
+
+        if use_rviz:
+            nodes.append(
+                Node(
+                    package="rviz2",
+                    executable="rviz2",
+                    name="rviz2",
+                    arguments=["-d", rviz_config],
+                    output="screen",
+                )
+            )
+
+        return nodes
+
+    return LaunchDescription([rviz_arg, OpaqueFunction(function=launch_setup)])
