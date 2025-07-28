@@ -151,7 +151,7 @@
     </collision>
   </link>
 
-  <joint name="joint1" type="continuous">
+  <joint name="joint1" type="revolute">
     <origin xyz="0.0 0.0 0.039" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="link1_1"/>
@@ -159,7 +159,7 @@
     <limit lower="-3.141592653589793" upper="3.141592653589793" effort="1000.0" velocity="1.0"/>
   </joint>
 
-  <joint name="joint2" type="continuous">
+  <joint name="joint2" type="revolute">
     <origin xyz="-0.0002 -0.0 0.0173" rpy="0 0 0"/>
     <parent link="link1_1"/>
     <child link="link2_1"/>
@@ -167,7 +167,7 @@
     <limit lower="-1.5707963267948966" upper="1.5707963267948966" effort="1000.0" velocity="1.0"/>
   </joint>
 
-  <joint name="joint3" type="continuous">
+  <joint name="joint3" type="revolute">
     <origin xyz="0.00025 0.014791 0.108347" rpy="0 0 0"/>
     <parent link="link2_1"/>
     <child link="link3_1"/>
@@ -175,7 +175,7 @@
     <limit lower="-1.48" upper="1.8" effort="1000.0" velocity="1.0"/>
   </joint>
 
-  <joint name="joint4" type="continuous">
+  <joint name="joint4" type="revolute">
     <origin xyz="0.000125 0.090467 0.002747" rpy="1.57 0 0"/>
     <parent link="link3_1"/>
     <child link="link4_1"/>
@@ -183,7 +183,7 @@
     <limit lower="-2.0" upper="2.0" effort="1000.0" velocity="1.0"/>
   </joint>
 
-  <joint name="joint5" type="continuous">
+  <joint name="joint5" type="revolute">
     <origin xyz="0.001353 7e-06 -0.045" rpy="0 0 0"/>
     <parent link="link4_1"/>
     <child link="gripper_static_1"/>
@@ -191,7 +191,7 @@
     <limit lower="-3.141592653589793" upper="3.141592653589793" effort="1000.0" velocity="1.0"/>
   </joint>
 
-  <joint name="joint_gripper" type="continuous">
+  <joint name="joint_gripper" type="revolute">
     <origin xyz="-0.0074 -0.00025 -0.01315" rpy="0 0 0"/>
     <parent link="gripper_static_1"/>
     <child link="gripper_moving_1"/>
