@@ -95,14 +95,14 @@
       <inertia ixx="2.4e-05" iyy="3.9e-05" izz="2.4e-05" ixy="0.0" iyz="0.0" ixz="-3e-06"/>
     </inertial>
     <visual>
-      <origin xyz="-0.000175 -0.105258 -0.167394" rpy="0 0 0"/>
+      <origin xyz="-0.000175 0.105258 -0.167394" rpy="0 0 ${pi}"/>
       <geometry>
         <mesh filename="file://$(find koch_description)/meshes/link4_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.000175 -0.105258 -0.167394" rpy="0 0 0"/>
+      <origin xyz="-0.000175 0.105258 -0.167394" rpy="0 0 ${pi}"/>
       <geometry>
         <mesh filename="file://$(find koch_description)/meshes/link4_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -156,7 +156,7 @@
     <parent link="base_link"/>
     <child link="link1_1"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="1000.0" velocity="1.0"/>
+    <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="1.0"/>
   </joint>
 
   <joint name="joint2" type="revolute">
@@ -164,7 +164,7 @@
     <parent link="link1_1"/>
     <child link="link2_1"/>
     <axis xyz="-1.0 -0.0 0.0"/>
-    <limit lower="-1.5707963267948966" upper="1.5707963267948966" effort="1000.0" velocity="1.0"/>
+    <limit lower="-${pi/2}" upper="${pi/2}" effort="1000.0" velocity="1.0"/>
   </joint>
 
   <joint name="joint3" type="revolute">
@@ -184,19 +184,19 @@
   </joint>
 
   <joint name="joint5" type="revolute">
-    <origin xyz="0.001353 7e-06 -0.045" rpy="0 0 0"/>
+    <origin xyz="0.001353 7e-06 -0.045" rpy="0 0 ${pi}"/>
     <parent link="link4_1"/>
     <child link="gripper_static_1"/>
     <axis xyz="0.0 0.0 -1.0"/>
-    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="1000.0" velocity="1.0"/>
+    <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="1.0"/>
   </joint>
 
   <joint name="joint_gripper" type="revolute">
     <origin xyz="-0.0074 -0.00025 -0.01315" rpy="0 0 0"/>
     <parent link="gripper_static_1"/>
     <child link="gripper_moving_1"/>
-    <axis xyz="-0.0 -1.0 -0.0"/>
-    <limit lower="-0.5" upper="1.5707963267948966" effort="1000.0" velocity="1.0"/>
+    <axis xyz="-0.0 1.0 -0.0"/>
+    <limit lower="-0.5" upper="${pi/2}" effort="1000.0" velocity="1.0"/>
   </joint>
 
   <ros2_control name="koch_ros2_control" type="system">
