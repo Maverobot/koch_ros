@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
-<robot name="koch" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+<robot name="koch_follower" xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
 <xacro:property name="body_color" value="Gazebo/Silver" />
 
 <gazebo>
   <plugin name="control" filename="libgazebo_ros_control.so"/>
 </gazebo>
-<gazebo reference="base_link">
+<gazebo reference="follower_base_link">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
@@ -14,42 +14,42 @@
   <gravity>true</gravity>
 </gazebo>
 
-<gazebo reference="link1_1">
+<gazebo reference="follower_link1_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
-<gazebo reference="link2_1">
+<gazebo reference="follower_link2_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
-<gazebo reference="link3_1">
+<gazebo reference="follower_link3_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
-<gazebo reference="link4_1">
+<gazebo reference="follower_link4_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
-<gazebo reference="gripper_static_1">
+<gazebo reference="follower_gripper_static_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
-<gazebo reference="gripper_moving_1">
+<gazebo reference="follower_gripper_moving_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>

@@ -14,22 +14,22 @@ controller_manager:
 position_controller:
   ros__parameters:
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint_gripper
+      - follower_joint1
+      - follower_joint2
+      - follower_joint3
+      - follower_joint4
+      - follower_joint5
+      - follower_joint_gripper
 
 joint_trajectory_controller:
   ros__parameters:
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint_gripper
+      - follower_joint1
+      - follower_joint2
+      - follower_joint3
+      - follower_joint4
+      - follower_joint5
+      - follower_joint_gripper
 
     command_interfaces:
       - position
