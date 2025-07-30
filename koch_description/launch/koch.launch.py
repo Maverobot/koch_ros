@@ -13,7 +13,7 @@ import xacro
 def generate_launch_description():
     share_dir = get_package_share_directory("koch_description")
 
-    xacro_file = os.path.join(share_dir, "urdf", "koch_follower.xacro")
+    xacro_file = os.path.join(share_dir, "urdf", "koch.xacro")
     rviz_config = os.path.join(share_dir, "config", "display.rviz")
 
     robot_description_config = xacro.process_file(xacro_file)

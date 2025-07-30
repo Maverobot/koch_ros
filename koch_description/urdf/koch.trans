@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
-
   <xacro:macro name="configure_transmissions" params="prefix">
 
     <transmission name="${prefix}joint1_tran">
