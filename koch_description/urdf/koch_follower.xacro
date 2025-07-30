@@ -2,8 +2,12 @@
 <robot name="koch_follower" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:include filename="$(find koch_description)/urdf/materials.xacro" />
-  <xacro:include filename="$(find koch_description)/urdf/koch_follower.trans" />
-  <xacro:include filename="$(find koch_description)/urdf/koch_follower.gazebo" />
+  <xacro:include filename="$(find koch_description)/urdf/koch.trans" />
+  <xacro:include filename="$(find koch_description)/urdf/koch.gazebo" />
+
+  <xacro:configure_gazebo prefix="follower_"/>
+  <xacro:configure_transmissions prefix="follower_"/>
+
   <link name="follower_base_link">
     <inertial>
       <origin xyz="-0.00017023202404845418 -0.021341439639662032 0.014423161616418092" rpy="0 0 0"/>
