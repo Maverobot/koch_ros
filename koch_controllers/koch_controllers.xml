@@ -1,0 +1,8 @@
+<library path="koch_controllers">
+  <class
+    name="koch_controllers/LeaderFollowerController"
+    type="koch_controllers::LeaderFollowerController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>Leader-follower controller for koch robot</description>
+  </class>
+</library>
