@@ -1,0 +1,10 @@
+<library path="koch_hardware">
+  <class
+    name="koch_hardware/KochHardware"
+    type="koch_hardware::KochHardware"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware interface for Koch v1.1 robot that wraps multiple dynamixel hardwares
+    </description>
+  </class>
+</library>
