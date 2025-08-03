@@ -171,7 +171,7 @@
       <parent link="leader_link1_1"/>
       <child link="leader_link2_1"/>
       <axis xyz="-1.0 -0.0 0.0"/>
-      <limit lower="-${pi/2}" upper="${pi/2}" effort="1000.0" velocity="10.0"/>
+      <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="10.0"/>
     </joint>
 
     <joint name="leader_joint3" type="revolute">
@@ -179,7 +179,7 @@
       <parent link="leader_link2_1"/>
       <child link="leader_link3_1"/>
       <axis xyz="-1.0 0.0 0.0"/>
-      <limit lower="-1.48" upper="1.8" effort="1000.0" velocity="10.0"/>
+      <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="10.0"/>
     </joint>
 
     <joint name="leader_joint4" type="revolute">
@@ -187,7 +187,7 @@
       <parent link="leader_link3_1"/>
       <child link="leader_link4_1"/>
       <axis xyz="1.0 0.0 0.0"/>
-      <limit lower="-2.0" upper="2.0" effort="1000.0" velocity="10.0"/>
+      <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="10.0"/>
     </joint>
 
     <joint name="leader_joint5" type="revolute">
@@ -203,7 +203,7 @@
       <parent link="leader_gripper_static_1"/>
       <child link="leader_gripper_moving_1"/>
       <axis xyz="-0.0 1.0 -0.0"/>
-      <limit lower="-0.5" upper="${pi/2}" effort="1000.0" velocity="10.0"/>
+      <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="10.0"/>
     </joint>
 
     <ros2_control name="koch_leader_ros2_control" type="system">
