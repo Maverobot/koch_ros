@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>koch_controllers</name>
+  <version>0.0.1</version>
+  <description>ros2_control controller for koch v1.1 robot</description>
+  <maintainer email="quzhengrobot@gmail.com">Zheng Qu</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>controller_interface</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <controller_interface plugin="${prefix}/koch_controllers.xml"/>
+  </export>
+</package>
