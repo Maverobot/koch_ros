@@ -209,10 +209,8 @@
     <ros2_control name="koch_follower_ros2_control" type="system">
       <hardware>
         <plugin>dynamixel_hardware/DynamixelHardware</plugin>
-        <param name="usb_port">/dev/ttyACM0</param>
+        <param name="usb_port">/dev/ttyACM1</param>
         <param name="baud_rate">1000000</param>
-        <!-- <param name="enable_torque">false</param> -->
-        <!-- <param name="use_dummy">true</param> -->
       </hardware>
       <joint name="follower_joint1">
         <param name="id">1</param>
