@@ -36,6 +36,8 @@ private:
 
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
     leader_state_handles_;
+  std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
+    follower_state_handles_;
   std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>>
     follower_command_handles_;
 };

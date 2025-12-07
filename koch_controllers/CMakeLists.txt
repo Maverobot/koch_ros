@@ -12,12 +12,18 @@ find_package(controller_interface REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 
-add_library(${PROJECT_NAME} SHARED src/leader_follower_controller.cpp)
+# Add kinematics library
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+add_library(kinematics SHARED src/kinematics/kinematics.cpp)
+target_include_directories(kinematics PUBLIC include)
+target_link_libraries(kinematics PUBLIC Eigen3::Eigen)
+target_link_libraries(kinematics PRIVATE rclcpp::rclcpp)
 
+# Add leader-follower controller
+add_library(${PROJECT_NAME} SHARED src/leader_follower_controller.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-
 target_link_libraries(koch_controllers PUBLIC
   controller_interface::controller_interface
   hardware_interface::hardware_interface
@@ -25,6 +31,7 @@ target_link_libraries(koch_controllers PUBLIC
   pluginlib::pluginlib
   rclcpp::rclcpp
 )
+target_link_libraries(koch_controllers PRIVATE kinematics)
 
 pluginlib_export_plugin_description_file(controller_interface koch_controllers.xml)
 
