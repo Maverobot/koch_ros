@@ -1,4 +1,5 @@
-#include "koch_controllers/leader_follower_controller.h"
+#include <koch_controllers/kinematics/kinematics.h>
+#include <koch_controllers/leader_follower_controller.h>
 
 #include "pluginlib/class_list_macros.hpp"
 #include "rclcpp/logging.hpp"
@@ -59,6 +60,7 @@ controller_interface::CallbackReturn LeaderFollowerController::on_activate(
   const rclcpp_lifecycle::State &)
 {
   leader_state_handles_.clear();
+  follower_state_handles_.clear();
   follower_command_handles_.clear();
 
   for (const auto & joint : leader_joint_names_)
@@ -81,20 +83,40 @@ controller_interface::CallbackReturn LeaderFollowerController::on_activate(
 
   for (const auto & joint : follower_joint_names_)
   {
-    auto handle = std::find_if(
-      command_interfaces_.begin(), command_interfaces_.end(),
-      [&](const auto & iface) {
-        return iface.get_name() == joint + "/position" && iface.get_interface_name() == "position";
-      });
-
-    if (handle == command_interfaces_.end())
     {
-      RCLCPP_ERROR(
-        get_node()->get_logger(), "Missing command interface for joint '%s'", joint.c_str());
-      return controller_interface::CallbackReturn::ERROR;
-    }
+      auto handle = std::find_if(
+        state_interfaces_.begin(), state_interfaces_.end(),
+        [&](const auto & iface) {
+          return iface.get_name() == joint + "/position" &&
+                 iface.get_interface_name() == "position";
+        });
 
-    follower_command_handles_.emplace_back(*handle);
+      if (handle == state_interfaces_.end())
+      {
+        RCLCPP_ERROR(
+          get_node()->get_logger(), "Missing state interface for joint '%s'", joint.c_str());
+        return controller_interface::CallbackReturn::ERROR;
+      }
+
+      follower_state_handles_.emplace_back(*handle);
+    }
+    {
+      auto handle = std::find_if(
+        command_interfaces_.begin(), command_interfaces_.end(),
+        [&](const auto & iface) {
+          return iface.get_name() == joint + "/position" &&
+                 iface.get_interface_name() == "position";
+        });
+
+      if (handle == command_interfaces_.end())
+      {
+        RCLCPP_ERROR(
+          get_node()->get_logger(), "Missing command interface for joint '%s'", joint.c_str());
+        return controller_interface::CallbackReturn::ERROR;
+      }
+
+      follower_command_handles_.emplace_back(*handle);
+    }
   }
 
   return controller_interface::CallbackReturn::SUCCESS;
@@ -110,14 +132,7 @@ controller_interface::return_type LeaderFollowerController::update(
       leader_pos * leader_to_follower_scale_[i] + leader_to_follower_offset_[i];
 
     // Normalize angle if needed (e.g., keep within [-pi, pi])
-    while (corrected_leader_pos > M_PI)
-    {
-      corrected_leader_pos -= 2.0 * M_PI;
-    }
-    while (corrected_leader_pos < -M_PI)
-    {
-      corrected_leader_pos += 2.0 * M_PI;
-    }
+    corrected_leader_pos = std::remainder(corrected_leader_pos, 2.0 * M_PI);
 
     const bool success = follower_command_handles_[i].get().set_value(corrected_leader_pos);
     if (!success)
@@ -130,6 +145,19 @@ controller_interface::return_type LeaderFollowerController::update(
       return controller_interface::return_type::ERROR;
     }
   }
+
+  Eigen::Matrix<double, 6, 1> q;
+  for (size_t i = 0; i < follower_state_handles_.size(); ++i)
+  {
+    q[i] = follower_state_handles_[i].get().get_optional().value();
+  }
+
+  Eigen::Matrix4d end_effector_pose = forwardKinematics(q);
+  RCLCPP_INFO_STREAM_THROTTLE(
+    get_node()->get_logger(), *get_node()->get_clock(), 1000,
+    "End effector pose:\n"
+      << end_effector_pose.format(
+           Eigen::IOFormat{Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n", "[", "]"}));
 
   return controller_interface::return_type::OK;
 }
@@ -152,6 +180,10 @@ LeaderFollowerController::state_interface_configuration() const
   controller_interface::InterfaceConfiguration config;
   config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
   for (const auto & joint : leader_joint_names_)
+  {
+    config.names.push_back(joint + "/position");
+  }
+  for (const auto & joint : follower_joint_names_)
   {
     config.names.push_back(joint + "/position");
   }

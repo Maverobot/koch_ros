@@ -158,6 +158,8 @@
       </collision>
     </link>
 
+    <link name="follower_gripper_tip"/>
+
     <joint name="follower_joint1" type="revolute">
       <origin xyz="0.0 0.0 0.039" rpy="0 0 0"/>
       <parent link="follower_base_link"/>
@@ -204,6 +206,12 @@
       <child link="follower_gripper_moving_1"/>
       <axis xyz="-0.0 1.0 -0.0"/>
       <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="10.0"/>
+    </joint>
+
+    <joint name="follower_joint_gripper_tip" type="fixed">
+      <parent link="follower_gripper_moving_1"/>
+      <child link="follower_gripper_tip"/>
+      <origin rpy="0 ${pi} 0" xyz="0.011 0 -0.052"/>
     </joint>
 
     <ros2_control name="koch_follower_ros2_control" type="system">
