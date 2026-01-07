@@ -8,6 +8,9 @@ controller_manager:
     leader_follower_controller:
       type: koch_controllers/LeaderFollowerController
 
+    claw_machine_controller:
+      type: koch_controllers/ClawMachineController
+
 leader_follower_controller:
   ros__parameters:
     leader_joints:
@@ -40,6 +43,36 @@ leader_follower_controller:
       - 1.
       - 1.
       - 1.
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+      - velocity
+
+claw_machine_controller:
+  ros__parameters:
+    # Example follower joints used by the claw machine controller.
+    # Adjust these names to match your URDF / hardware setup.
+    joints:
+      - follower_joint1
+      - follower_joint2
+      - follower_joint3
+      - follower_joint4
+      - follower_joint5
+      - follower_joint_gripper
+
+    initial_joint_positions:
+      - -0.08436894416809082
+      - -0.13805827498435974
+      - 0.09050486981868744
+      - -1.8315731287002563
+      - -1.6444274187088013
+      - -0.11198060214519501
+
+    # Timeout (seconds) after which /cmd_vel is considered stale
+    cmd_vel_timeout: 0.1
 
     command_interfaces:
       - position
