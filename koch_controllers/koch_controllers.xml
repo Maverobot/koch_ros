@@ -5,4 +5,11 @@
     base_class_type="controller_interface::ControllerInterface">
     <description>Leader-follower controller for koch robot</description>
   </class>
+
+  <class
+    name="koch_controllers/ClawMachineController"
+    type="koch_controllers::ClawMachineController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>Claw machine controller by using only the follower arm of the koch robot</description>
+  </class>
 </library>

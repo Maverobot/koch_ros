@@ -21,7 +21,11 @@ target_link_libraries(kinematics PUBLIC Eigen3::Eigen)
 target_link_libraries(kinematics PRIVATE rclcpp::rclcpp)
 
 # Add leader-follower controller
-add_library(${PROJECT_NAME} SHARED src/leader_follower_controller.cpp)
+add_library(${PROJECT_NAME} SHARED
+  src/claw_machine_controller.cpp
+  src/leader_follower_controller.cpp
+)
+
 target_include_directories(${PROJECT_NAME} PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
