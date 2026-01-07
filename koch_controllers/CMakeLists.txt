@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 # Add kinematics library
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)

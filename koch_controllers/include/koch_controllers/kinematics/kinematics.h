@@ -22,6 +22,10 @@ static const std::array<Eigen::Vector3d, 6> v = {
   omega.at(4).cross(-points_on_axis.at(4)), omega.at(5).cross(-points_on_axis.at(5)),
 };
 
+Eigen::Matrix<double, 6, 6> adjoint_representation(const Eigen::Matrix4d & T);
+
 Eigen::Matrix4d motionByJoint(size_t index, double theta);
 
 Eigen::Matrix4d forwardKinematics(const Eigen::Matrix<double, 6, 1> & q);
+
+Eigen::Matrix<double, 6, 6> spaceJacobian(const Eigen::Matrix<double, 6, 1> & q);

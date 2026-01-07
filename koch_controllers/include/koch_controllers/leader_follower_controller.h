@@ -1,5 +1,8 @@
 #pragma once
 
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+
 #include "controller_interface/controller_interface.hpp"
 #include "hardware_interface/loaned_command_interface.hpp"
 #include "hardware_interface/loaned_state_interface.hpp"
@@ -35,11 +38,16 @@ private:
   std::vector<double> leader_to_follower_scale_;
 
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
-    leader_state_handles_;
+    leader_position_state_handles_;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
-    follower_state_handles_;
+    follower_position_state_handles_;
+  std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
+    follower_velocity_state_handles_;
   std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>>
-    follower_command_handles_;
+    follower_position_command_handles_;
+
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
 };
 
 }  // namespace koch_controllers
