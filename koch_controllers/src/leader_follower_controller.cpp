@@ -1,6 +1,8 @@
 #include <koch_controllers/kinematics/kinematics.h>
 #include <koch_controllers/leader_follower_controller.h>
 
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 #include "pluginlib/class_list_macros.hpp"
 #include "rclcpp/logging.hpp"
 
@@ -13,12 +15,15 @@ controller_interface::CallbackReturn LeaderFollowerController::on_init()
   auto_declare<std::vector<std::string>>("follower_joints", {});
   auto_declare<std::vector<double>>("leader_to_follower_offset", {});
   auto_declare<std::vector<double>>("leader_to_follower_scale", {});
+
+  twist_pub_ = get_node()->create_publisher<geometry_msgs::msg::Twist>("end_effector_twist", 10);
+  pose_pub_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>("end_effector_pose", 10);
+
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
 controller_interface::CallbackReturn LeaderFollowerController::on_configure(
   const rclcpp_lifecycle::State &)
-
 {
   leader_joint_names_ = get_node()->get_parameter("leader_joints").as_string_array();
   follower_joint_names_ = get_node()->get_parameter("follower_joints").as_string_array();
@@ -59,9 +64,10 @@ controller_interface::CallbackReturn LeaderFollowerController::on_configure(
 controller_interface::CallbackReturn LeaderFollowerController::on_activate(
   const rclcpp_lifecycle::State &)
 {
-  leader_state_handles_.clear();
-  follower_state_handles_.clear();
-  follower_command_handles_.clear();
+  leader_position_state_handles_.clear();
+  follower_position_state_handles_.clear();
+  follower_velocity_state_handles_.clear();
+  follower_position_command_handles_.clear();
 
   for (const auto & joint : leader_joint_names_)
   {
@@ -74,11 +80,11 @@ controller_interface::CallbackReturn LeaderFollowerController::on_activate(
     if (handle == state_interfaces_.end())
     {
       RCLCPP_ERROR(
-        get_node()->get_logger(), "Missing state interface for joint '%s'", joint.c_str());
+        get_node()->get_logger(), "Missing position state interface for joint '%s'", joint.c_str());
       return controller_interface::CallbackReturn::ERROR;
     }
 
-    leader_state_handles_.emplace_back(*handle);
+    leader_position_state_handles_.emplace_back(*handle);
   }
 
   for (const auto & joint : follower_joint_names_)
@@ -94,11 +100,30 @@ controller_interface::CallbackReturn LeaderFollowerController::on_activate(
       if (handle == state_interfaces_.end())
       {
         RCLCPP_ERROR(
-          get_node()->get_logger(), "Missing state interface for joint '%s'", joint.c_str());
+          get_node()->get_logger(), "Missing position state interface for joint '%s'",
+          joint.c_str());
         return controller_interface::CallbackReturn::ERROR;
       }
 
-      follower_state_handles_.emplace_back(*handle);
+      follower_position_state_handles_.emplace_back(*handle);
+    }
+    {
+      auto handle = std::find_if(
+        state_interfaces_.begin(), state_interfaces_.end(),
+        [&](const auto & iface) {
+          return iface.get_name() == joint + "/velocity" &&
+                 iface.get_interface_name() == "velocity";
+        });
+
+      if (handle == state_interfaces_.end())
+      {
+        RCLCPP_ERROR(
+          get_node()->get_logger(), "Missing velocity state interface for joint '%s'",
+          joint.c_str());
+        return controller_interface::CallbackReturn::ERROR;
+      }
+
+      follower_velocity_state_handles_.emplace_back(*handle);
     }
     {
       auto handle = std::find_if(
@@ -111,11 +136,12 @@ controller_interface::CallbackReturn LeaderFollowerController::on_activate(
       if (handle == command_interfaces_.end())
       {
         RCLCPP_ERROR(
-          get_node()->get_logger(), "Missing command interface for joint '%s'", joint.c_str());
+          get_node()->get_logger(), "Missing positiion command interface for joint '%s'",
+          joint.c_str());
         return controller_interface::CallbackReturn::ERROR;
       }
 
-      follower_command_handles_.emplace_back(*handle);
+      follower_position_command_handles_.emplace_back(*handle);
     }
   }
 
@@ -123,18 +149,19 @@ controller_interface::CallbackReturn LeaderFollowerController::on_activate(
 }
 
 controller_interface::return_type LeaderFollowerController::update(
-  const rclcpp::Time &, const rclcpp::Duration &)
+  const rclcpp::Time & time, const rclcpp::Duration &)
 {
-  for (size_t i = 0; i < leader_state_handles_.size(); ++i)
+  for (size_t i = 0; i < leader_position_state_handles_.size(); ++i)
   {
-    const double leader_pos = leader_state_handles_[i].get().get_optional().value();
+    const double leader_pos = leader_position_state_handles_[i].get().get_optional().value();
     double corrected_leader_pos =
       leader_pos * leader_to_follower_scale_[i] + leader_to_follower_offset_[i];
 
     // Normalize angle if needed (e.g., keep within [-pi, pi])
     corrected_leader_pos = std::remainder(corrected_leader_pos, 2.0 * M_PI);
 
-    const bool success = follower_command_handles_[i].get().set_value(corrected_leader_pos);
+    const bool success =
+      follower_position_command_handles_[i].get().set_value(corrected_leader_pos);
     if (!success)
     {
       RCLCPP_ERROR(
@@ -147,17 +174,53 @@ controller_interface::return_type LeaderFollowerController::update(
   }
 
   Eigen::Matrix<double, 6, 1> q;
-  for (size_t i = 0; i < follower_state_handles_.size(); ++i)
+  Eigen::Matrix<double, 6, 1> dq;
+  for (size_t i = 0; i < follower_position_state_handles_.size(); ++i)
   {
-    q[i] = follower_state_handles_[i].get().get_optional().value();
+    q[i] = follower_position_state_handles_[i].get().get_optional().value();
+    dq[i] = follower_velocity_state_handles_[i].get().get_optional().value();
   }
 
-  Eigen::Matrix4d end_effector_pose = forwardKinematics(q);
-  RCLCPP_INFO_STREAM_THROTTLE(
-    get_node()->get_logger(), *get_node()->get_clock(), 1000,
-    "End effector pose:\n"
-      << end_effector_pose.format(
-           Eigen::IOFormat{Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n", "[", "]"}));
+  Eigen::Matrix<double, 6, 6> Js = spaceJacobian(q);
+  Eigen::Matrix<double, 6, 1> twist = Js * dq;
+
+  if (twist_pub_ && twist_pub_->get_subscription_count() > 0)
+  {
+    geometry_msgs::msg::Twist msg;
+    msg.angular.x = twist(0);
+    msg.angular.y = twist(1);
+    msg.angular.z = twist(2);
+    msg.linear.x = twist(3);
+    msg.linear.y = twist(4);
+    msg.linear.z = twist(5);
+    twist_pub_->publish(msg);
+  }
+
+  // Compute and publish end-effector pose using forward kinematics
+  if (pose_pub_ && pose_pub_->get_subscription_count() > 0)
+  {
+    Eigen::Matrix4d T_0e = forwardKinematics(q);
+
+    geometry_msgs::msg::PoseStamped pose_msg;
+    pose_msg.header.stamp = time;
+    pose_msg.header.frame_id = "base_link";
+
+    pose_msg.pose.position.x = T_0e(0, 3);
+    pose_msg.pose.position.y = T_0e(1, 3);
+    pose_msg.pose.position.z = T_0e(2, 3);
+
+    // Extract rotation matrix and convert to quaternion
+    Eigen::Matrix3d R = T_0e.topLeftCorner<3, 3>();
+    Eigen::Quaterniond q_rot(R);
+    q_rot.normalize();
+
+    pose_msg.pose.orientation.x = q_rot.x();
+    pose_msg.pose.orientation.y = q_rot.y();
+    pose_msg.pose.orientation.z = q_rot.z();
+    pose_msg.pose.orientation.w = q_rot.w();
+
+    pose_pub_->publish(pose_msg);
+  }
 
   return controller_interface::return_type::OK;
 }
@@ -186,6 +249,7 @@ LeaderFollowerController::state_interface_configuration() const
   for (const auto & joint : follower_joint_names_)
   {
     config.names.push_back(joint + "/position");
+    config.names.push_back(joint + "/velocity");
   }
   return config;
 }

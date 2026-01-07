@@ -46,3 +46,4 @@ leader_follower_controller:
 
     state_interfaces:
       - position
+      - velocity
