@@ -14,7 +14,7 @@ ROS 2 packages for the Koch v1.1 robot arm, a low-cost 6-DOF manipulator with a 
 fabricated positions; a short first Fast reply can even seed invalid goals before
 torque-on. Both ROBOTIS and legacy drivers are affected. This migration uses
 ROBOTIS 1.5.1 unchanged with SDK branch `koch/validate-read-replies`, commit
-`3d9eb43` on 4.0.3. The SDK patch preserves API/ABI, version and write behavior.
+`35974f0` on 4.0.3. The SDK patch preserves API/ABI, version and write behavior.
 Installing only the released ROBOTIS package is **not sufficient**.
 
 With the patched SDK checkout and `koch_ros` under your workspace's `src/`:
@@ -84,6 +84,10 @@ proceed.** An Alert is not a safe refusal mechanism.
 Normal startup writes mode 3, follower gains and indirect mappings; no limits,
 offsets or profiles. Activation reads the measured pose, seeds goals, then enables
 follower torque. Leader passivity applies to normal cyclic operation only.
+Do not use `hardware_components_initial_state` to start a Koch component inactive:
+the unmodified driver initializes joint states to 0.0, and early failed reads can
+let the broadcaster publish zeros before activation's first complete read.
+The supplied launches do not use that configuration.
 Claw activation subsequently commands its initial arm pose and opens the gripper.
 Nonzero Hardware Error Status during activation prevents seeding/torque until
 the startup timeout; after activation it is diagnostic, not an automatic stop.
