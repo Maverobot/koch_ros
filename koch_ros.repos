@@ -1,0 +1,9 @@
+# Source dependencies for the ROBOTIS hardware backend (ROS 2 Kilted).
+# Import from the workspace root: vcs import src < src/koch_ros/koch_ros.repos
+repositories:
+  # DynamixelSDK 4.0.3 + Protocol 2.0 read-reply validation (Maverobot/DynamixelSDK#1).
+  # Pinned to the commit validated on the simulated bus and the real follower.
+  DynamixelSDK:
+    type: git
+    url: https://github.com/Maverobot/DynamixelSDK.git
+    version: 35974f094b97b6c077eec8de888125e6c9942d54

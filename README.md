@@ -18,11 +18,12 @@ ROBOTIS 1.5.1 unchanged with the SDK branch
 commit `35974f0` on 4.0.3. The SDK patch preserves API/ABI, version and write behavior.
 Installing only the released ROBOTIS package is **not sufficient**.
 
-With `koch_ros` under your workspace's `src/`:
+With `koch_ros` under your workspace's `src/`, import the SDK at the validated
+commit pinned in `koch_ros.repos`:
 
 ```sh
 sudo apt install ros-kilted-dynamixel-hardware-interface
-git clone -b koch/validate-read-replies https://github.com/Maverobot/DynamixelSDK.git src/DynamixelSDK
+vcs import src < src/koch_ros/koch_ros.repos
 source /opt/ros/kilted/setup.bash
 # From the workspace root; do not build the SDK examples/custom interfaces.
 colcon build --packages-select dynamixel_sdk koch_description koch_controllers
