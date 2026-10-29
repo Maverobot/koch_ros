@@ -9,16 +9,37 @@ ROS 2 packages for the Koch v1.1 robot arm, a low-cost 6-DOF manipulator with a 
 
 ## Hardware backend (ROS 2 Kilted)
 
-Install the maintained ROBOTIS plugin (validated with 1.5.1 and SDK 4.0.3):
+**The patched DynamixelSDK overlay is required for real hardware.** Stock SDK
+4.0.3 can accept CRC-valid error-only or truncated read replies and expose
+fabricated positions; a short first Fast reply can even seed invalid goals before
+torque-on. Both ROBOTIS and legacy drivers are affected. This migration uses
+ROBOTIS 1.5.1 unchanged with SDK branch `koch/validate-read-replies`, commit
+`3d9eb43` on 4.0.3. The SDK patch preserves API/ABI, version and write behavior.
+Installing only the released ROBOTIS package is **not sufficient**.
+
+With the patched SDK checkout and `koch_ros` under your workspace's `src/`:
 
 ```sh
 sudo apt install ros-kilted-dynamixel-hardware-interface
+source /opt/ros/kilted/setup.bash
+# From the workspace root; do not build the SDK examples/custom interfaces.
+colcon build --packages-select dynamixel_sdk koch_description koch_controllers
+source install/setup.bash
+ldd "$(ros2 pkg prefix dynamixel_hardware_interface)/lib/libdynamixel_hardware_interface.so" \
+  | grep libdynamixel_sdk
 ```
+
+The resolved library must be the workspace's
+`install/dynamixel_sdk/lib/libdynamixel_sdk.so`, not `/opt/ros/kilted/lib/`.
+Source any legacy-driver underlay **before** this overlay. After a safe launch,
+verify the actual controller-manager PID with
+`grep libdynamixel_sdk.so /proc/<pid>/maps`; `ldd` alone only predicts resolution.
+The pty tests enforce this process-mapping check and fail if stock SDK is loaded.
 
 All three control launches accept `hardware:=robotis|legacy|mock` (default
 `robotis`), `follower_port:=/dev/ttyACM0`, and, when a leader is included,
-`leader_port:=/dev/ttyACM1`. The same arguments work when rendering `koch.xacro`
-or `koch_follower_standalone.xacro`. For a no-serial preview:
+`leader_port:=/dev/ttyACM1`. Both top-level xacros accept the same arguments.
+For no-serial previews:
 
 ```sh
 ros2 launch koch_description koch.launch.py hardware:=mock rviz:=false
@@ -26,94 +47,89 @@ ros2 launch koch_controllers leader_follower.launch.py hardware:=mock rviz:=fals
 ros2 launch koch_controllers claw_machine.launch.py hardware:=mock rviz:=false
 ```
 
-`mock` uses `mock_components/GenericSystem`, not the old driver's `use_dummy`.
-Its initial positions keep controller startup defined but do not model a motor.
-To roll back, install/build the optional legacy `dynamixel_hardware` separately
-and select `hardware:=legacy` with the appropriate ports. Its ros2_control block
-and position/velocity command interfaces are retained. Never run two drivers
-against the same bus. Display/Gazebo launches only render the default description;
-they do not start this hardware plugin.
+`mock` uses GenericSystem with defined initial positions, not servo dynamics.
+For rollback, separately install the fixed legacy `dynamixel_hardware` driver
+and select `hardware:=legacy`; keep the patched SDK overlay. Never run two drivers
+against one bus. Display/Gazebo launches render only, without starting this plugin.
+**Kinex lab provisioner integration is separate:** it expects legacy joint/ID
+schema from an argument-less render, which now produces ROBOTIS GPIOs. Update its
+render arguments/parser before use; this repository does not modify that tool.
 
 ### Interfaces and units
 
-ROBOTIS exposes follower **position commands only** and position/velocity/effort
-states. Leader joints are **state-only**, with `Torque Enable=0` and no GPIO
-command interfaces. No Koch controller needs velocity commands; the official
-driver cannot switch operating mode at runtime. Six GPIOs in joint order map
-IDs 1–2 to XL430-W250 (Present Load) and IDs 3–6 to XL330-M288 (Present Current).
-Hardware Error Status is read for every servo. The firmware-specific model
-files select the correct indirect address layouts (XL330 firmware 52 differs).
+ROBOTIS exports follower position commands and position/velocity/effort states.
+The leader is state-only, with GPIO `Torque Enable=0` and no command interfaces.
+Legacy retains position/velocity commands; ROBOTIS cannot switch operating mode
+at runtime, and no Koch controller needs velocity commands. GPIO order matches
+joint order: IDs 1–2 XL430-W250 use Present Load; IDs 3–6 XL330-M288 use Present
+Current. Firmware-selected models handle the differing indirect layouts.
 
-Position is radians, raw 2048 = 0, with 4096 counts/revolution. Velocity is rad/s;
-a signed override uses the e-Manual's 0.229 rpm/count, matching legacy float math
-within rounding (the upstream model multiplier is about 0.05% low). Effort is
-signed raw × 2.69 for **both** models, preserving the legacy driver's convention.
-This is **not Nm**, not comparable torque between models, and XL430 load is not
-motor current. Explicit unit overrides also prevent unsigned negative XL430 loads.
+Position is radians (raw 2048 = zero, 4096 counts/revolution). Signed velocity
+uses 0.229 rpm/count, matching legacy float math within rounding; the upstream
+model multiplier is about 0.05% low. Signed effort is raw × 2.69 for both models,
+including negative XL430 load. This preserves legacy values, **not Nm** or
+comparable motor torque/current across models.
 
-### Startup, faults and torque safety
+### Startup, faults and operator hazards
 
-Mechanically support the follower before startup or shutdown. Initialization
-requires torque off, explicitly sets `disable_torque_at_init=false`, and writes
-Operating Mode 3 to EEPROM on every normal startup. It also configures indirect
-addresses and follower position gains in RAM (see the xacros). It does not write limits, offsets or profiles. Activation reads
-the measured pose, seeds Goal Position **before** enabling follower torque, and
-leaves the leader torque-off. Claw control subsequently commands its configured
-initial arm pose and opens the gripper; this is independent of driver seeding.
+Support the follower mechanically before startup or shutdown. With Alert-free
+servos, `disable_torque_at_init=false` refuses already-on torque. Checks are per
+GPIO, not whole-bus preflight: earlier torque-off servos may receive Operating
+Mode 3 EEPROM and gain RAM writes before a later torque-on servo causes refusal.
+Nothing is then written to that servo or later servos; no torque/goal writes occur.
+**Exception: upstream reboots a servo whose ping reports Alert before checking
+its torque. An already torque-on joint can lose support, then initialization can
+proceed.** An Alert is not a safe refusal mechanism.
 
-**Upstream 1.5.1 limitation:** torque checks and initialization happen per GPIO,
-not as a whole-bus preflight. If an already torque-on servo is encountered,
-activation is refused, with no torque or goal writes; preceding torque-off servos
-may already have received Operating Mode 3 EEPROM and follower gain RAM writes.
-Nothing is written to
-the torque-on servo or later servos. Turn all servos off safely before startup.
+Normal startup writes mode 3, follower gains and indirect mappings; no limits,
+offsets or profiles. Activation reads the measured pose, seeds goals, then enables
+follower torque. Leader passivity applies to normal cyclic operation only.
+Claw activation subsequently commands its initial arm pose and opens the gripper.
+Nonzero Hardware Error Status during activation prevents seeding/torque until
+the startup timeout; after activation it is diagnostic, not an automatic stop.
+Alert-only status packets still carry valid register data.
 
-`error_timeout_ms=500` is shared by activation and accumulated failed-read
-periods. Unsupported Fast Bulk Read needs ten failed attempts before ordinary
-Bulk Read fallback: the simulated bus takes about 355 ms. A 250 ms budget failed
-before fallback, so 500 ms was chosen explicitly. Fast-supported startup, brief
-read drops and one silent servo retain the last valid state (no zero-filled
-positions). Sustained failure takes hardware out of active and deactivates its
-command controllers, **without torque-off**: the follower keeps holding its last
-goal. Restoring communication does not automatically reactivate it. This is not
-an emergency stop, nor a hard wall-clock guarantee on a loaded machine.
+`error_timeout_ms=500` covers activation and accumulated failed-read periods.
+Unsupported Fast Bulk requires ten attempts before fallback (~355 ms on the pty);
+250 ms failed before fallback. The patched SDK rejects wrong lengths/IDs and
+non-Alert packet errors. Brief failures hold the last valid state; sustained
+failures unconfigure hardware and deactivate its controllers **without torque-off**.
+Communication restoration does not automatically recover them. This is neither
+an emergency stop nor a hard wall-clock guarantee. Deactivation/destruction
+attempts torque-off and can drop the arm.
 
-Explicit deactivation/destruction attempts torque-off; a gravity-loaded arm can
-drop. Do not rely on shutdown or a fault to release torque safely. The driver
-ignores some command-write/torque-write failures and treats Hardware Error Status
-primarily as diagnostics. Its cyclic write buffers also need upstream endurance
-review for allocation/leak behavior. Simulated tests do not validate physical
-bus timing, voltage, temperature, loads or independent safety supervision.
+Each arm has `koch_follower/` or `koch_leader/` names for `dxl_state` and services
+`get_dxl_data`, `set_dxl_data`, `reboot_dxl`, `set_dxl_torque`. **Raw write, torque
+and reboot services bypass leader passivity and follower startup seeding.** They
+can enable a leader or move/drop a follower; keep them operator-controlled with
+physical support. Callbacks can block the loop; acknowledgements need not confirm
+successful register writes. Runtime torque re-enable uses different ordering
+from startup and can act on stale goals. Reboot does not replay all settings.
+The upstream `dxl_state.torque_state` field is unreliable: do not use it as proof
+of actual torque or a safety interlock. Unchecked write results and cyclic
+allocation/leak concerns also remain upstream; the SDK patch does not fix them.
 
-Each arm has its own `koch_follower/` or `koch_leader/` names:
-`dxl_state` topic and `get_dxl_data`, `set_dxl_data`, `reboot_dxl`, `set_dxl_torque`
-services. These callbacks can block the control loop; write/torque responses can
-acknowledge queued requests, not successful register changes. Avoid runtime
-follower torque re-enable: its service ordering differs from startup seeding and
-can use a stale goal. Reboot acts on the configured bus, can re-enable follower
-torque, and does not replay all initialization settings. Recovery must be
-operator-controlled with the mechanism supported, not automatic service retries.
+### Offline regression tests and bring-up
 
-### Offline regression tests
+```sh
+colcon test --packages-select dynamixel_sdk koch_description koch_controllers
+colcon test-result --verbose
+```
 
-`colcon test --packages-select koch_description koch_controllers` runs a pty
-Protocol 2 simulator against the real installed plugin, Koch descriptions and
-controller configurations in an isolated ROS environment. Every runtime port is
-asserted to be a simulator-owned `/dev/pts/*`; mock-launch tests send no bus traffic.
-The tests cover signed units, startup ordering/refusal, passive leader, transient
-and sustained read faults, Fast Bulk fallback, leader/follower transforms, claw
-motion/grasping and the three mock launches. The simulator implements CRC,
-stuffing (not applied to Fast replies), both indirect layouts, EEPROM access
-protection and idealized goal tracking. It is not a physical motor/USB emulator;
-reboot only models torque/error reset, not a complete firmware restart.
+Tests use isolated ROS communication and simulator-owned `/dev/pts/*` only.
+They cover the real plugin's startup/units, malformed ordinary/Fast replies,
+Alert semantics, transient and sustained faults, LF/claw behavior and all mock
+launches. The legacy Sync Read check skips cleanly without its optional underlay.
+The simulator models CRC/stuffing, mixed indirect layouts, EEPROM protection and
+ideal goal tracking, not USB timing, loads, power or temperature. Reboot models
+only torque/error reset. Existing description copyright/flake8 failures predate
+the migration; new tests add no lint failures.
 
-Before using real arms: verify IDs/models/firmware and separate motor supply
-requirements; support the mechanism and provide an independent power stop;
-confirm all servos are torque-off; start with a restrained single servo; check
-raw/ROS position, velocity, signed effort and error registers; verify leader
-passivity and follower seed-before-enable; try tiny bounded motions; then verify
-supported shutdown, fault/recovery behavior and sustained 80 Hz timing on both
-buses. Simulator success alone is not a hardware safety approval.
+Before real use: verify IDs/models/firmware and separate supply requirements;
+support the mechanism and provide an independent power stop; inspect torque and
+hardware errors; validate one restrained servo's units and seed-before-enable;
+verify leader passivity, tiny bounded motions, supported shutdown/recovery and
+sustained two-bus 80 Hz timing. Simulator success is not hardware safety approval.
 
 ## Controllers
 
