@@ -99,6 +99,27 @@ def test_hardware_selection(model, arms, hardware, plugin):
                     assert p_gain is None and d_gain is None
 
 
+@pytest.mark.parametrize('hardware', ['robotis', 'legacy', 'mock'])
+def test_koch_without_leader(hardware):
+    """Omit every leader element without moving or changing the follower."""
+    path = Path(get_package_share_directory('koch_description')) / 'urdf' / 'koch.xacro'
+    mappings = {'hardware': hardware, 'follower_port': '/render-only/follower'}
+    default = ET.fromstring(xacro.process_file(str(path), mappings=mappings).toxml())
+    robot = ET.fromstring(xacro.process_file(
+        str(path), mappings={**mappings, 'leader': 'false'}).toxml())
+    assert 'leader_' not in ET.tostring(robot, encoding='unicode')
+    assert [s.attrib['name'] for s in robot.findall('ros2_control')] == [
+        'koch_follower_ros2_control']
+    assert robot.find('joint[@name="follower_base_link_joint"]/origin').attrib['xyz'] == (
+        '-0.2 0 0')
+    assert len(robot.findall('gazebo/plugin')) == 1
+    expected = [ET.tostring(element) for element in default
+                if 'follower_' in ET.tostring(element, encoding='unicode')]
+    actual = [ET.tostring(element) for element in robot
+              if 'follower_' in ET.tostring(element, encoding='unicode')]
+    assert actual == expected
+
+
 def test_invalid_hardware_is_rejected():
     """Reject misspelled hardware choices rather than silently omitting a system."""
     path = Path(get_package_share_directory('koch_description')) / 'urdf' / 'koch.xacro'

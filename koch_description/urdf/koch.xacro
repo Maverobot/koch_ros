@@ -2,6 +2,7 @@
 <robot name="koch" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:arg name="hardware" default="robotis"/>
+  <xacro:arg name="leader" default="true"/>
   <xacro:arg name="follower_port" default="/dev/ttyACM0"/>
   <xacro:arg name="leader_port" default="/dev/ttyACM1"/>
 
@@ -12,13 +13,17 @@
   <xacro:include filename="$(find koch_description)/urdf/koch_follower.xacro"/>
   <xacro:include filename="$(find koch_description)/urdf/koch_leader.xacro"/>
 
-  <xacro:configure_gazebo prefix="leader_"/>
-  <xacro:configure_transmissions prefix="leader_"/>
+  <xacro:if value="$(arg leader)">
+    <xacro:configure_gazebo prefix="leader_"/>
+    <xacro:configure_transmissions prefix="leader_"/>
+  </xacro:if>
   <xacro:configure_gazebo prefix="follower_"/>
   <xacro:configure_transmissions prefix="follower_"/>
 
   <link name="base_link"/>
   <xacro:koch_follower hardware="$(arg hardware)" port="$(arg follower_port)" parent_link="base_link" xyz="-0.2 0 0" />
-  <xacro:koch_leader hardware="$(arg hardware)" port="$(arg leader_port)" parent_link="base_link" xyz="0.2 0 0" />
+  <xacro:if value="$(arg leader)">
+    <xacro:koch_leader hardware="$(arg hardware)" port="$(arg leader_port)" parent_link="base_link" xyz="0.2 0 0" />
+  </xacro:if>
 
 </robot>

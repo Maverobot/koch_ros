@@ -28,6 +28,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'hardware', default_value='robotis',
             choices=['robotis', 'legacy', 'mock']),
+        DeclareLaunchArgument(
+            'leader', default_value='true', choices=['true', 'false'],
+            description='Include the leader arm'),
         DeclareLaunchArgument('follower_port', default_value='/dev/ttyACM0'),
         DeclareLaunchArgument('leader_port', default_value='/dev/ttyACM1'),
     ]
@@ -37,7 +40,7 @@ def generate_launch_description():
         robot_description_config = xacro.process_file(
             xacro_file, mappings={
                 name: LaunchConfiguration(name).perform(context)
-                for name in ['hardware', 'follower_port', 'leader_port']
+                for name in ['hardware', 'leader', 'follower_port', 'leader_port']
             })
         use_rviz = LaunchConfiguration("rviz").perform(context) == "true"
         nodes = [

@@ -39,6 +39,9 @@ The pty tests enforce this process-mapping check and fail if stock SDK is loaded
 All three control launches accept `hardware:=robotis|legacy|mock` (default
 `robotis`), `follower_port:=/dev/ttyACM0`, and, when a leader is included,
 `leader_port:=/dev/ttyACM1`. Both top-level xacros accept the same arguments.
+Use `leader:=false` with `koch.launch.py` when only the follower is connected;
+no `leader_port` is needed. With the default `leader:=true`, a missing leader
+prevents the controller manager from initializing.
 For no-serial previews:
 
 ```sh

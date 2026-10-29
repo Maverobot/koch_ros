@@ -94,14 +94,17 @@ class DriverSession:
             assert bus.port.startswith('/dev/pts/')
             assert os.ttyname(bus.slave) == bus.port
         share = Path(get_package_share_directory('koch_description'))
-        model = 'koch.xacro' if leader else 'koch_follower_standalone.xacro'
-        mappings = {'hardware': 'mock' if launch else hardware}
+        koch_launch = launch == ('koch_description', 'koch.launch.py')
+        model = 'koch.xacro' if leader or koch_launch else 'koch_follower_standalone.xacro'
+        mappings = {'hardware': hardware}
+        if koch_launch and leader is None:
+            mappings['leader'] = 'false'
         mappings.update({f'{arm}_port': bus.port for arm, bus in buses.items()})
         urdf = xacro.process_file(str(share / 'urdf' / model), mappings=mappings).toxml()
         port_param = 'usb_port' if hardware == 'legacy' else 'port_name'
         ports = ET.fromstring(urdf).findall(
             f'./ros2_control/hardware/param[@name="{port_param}"]')
-        if not launch:
+        if hardware != 'mock':
             assert {p.text for p in ports} == {b.port for b in buses.values()}
         if launch:
             package, filename = launch
@@ -503,6 +506,7 @@ def test_claw_machine_initial_pose_motion_and_grasping(tmp_path):
 
 @pytest.mark.parametrize('package,filename,controller,dual', [
     ('koch_description', 'koch.launch.py', 'joint_trajectory_controller', True),
+    ('koch_description', 'koch.launch.py', 'joint_trajectory_controller', False),
     ('koch_controllers', 'leader_follower.launch.py', 'leader_follower_controller', True),
     ('koch_controllers', 'claw_machine.launch.py', 'claw_machine_controller', False),
 ])
@@ -512,7 +516,8 @@ def test_mock_launches(tmp_path, package, filename, controller, dual):
     leader = DynamixelBus() if dual else None
     session = None
     try:
-        session = DriverSession(tmp_path, follower, leader, launch=(package, filename))
+        session = DriverSession(tmp_path, follower, leader, launch=(package, filename),
+                                hardware='mock')
         # Do not contend with the launch's parallel spawners during startup.
         expected_count = 3 if controller == 'joint_trajectory_controller' else 2
         session.wait(lambda: session.text().count('Configured and activated') >= expected_count,
@@ -579,9 +584,9 @@ def bus_session(tmp_path):
     """Own a simulator/session and retain wire artifacts even on assertion failure."""
     buses, sessions = [], []
 
-    def start(bus, hardware='robotis'):
+    def start(bus, hardware='robotis', launch=None):
         buses.append(bus)
-        session = DriverSession(tmp_path, bus, hardware=hardware)
+        session = DriverSession(tmp_path, bus, hardware=hardware, launch=launch)
         sessions.append(session)
         return session
 
@@ -595,6 +600,18 @@ def bus_session(tmp_path):
         (tmp_path / 'group-transactions.json').write_text(
             json.dumps(bus.group_transactions, indent=2))
         bus.close()
+
+
+def test_koch_launch_robotis_without_leader(bus_session):
+    """The follower-only launch must activate all three trajectory-stack controllers."""
+    bus = DynamixelBus()
+    session = bus_session(bus, launch=('koch_description', 'koch.launch.py'))
+    session.wait(lambda: session.text().count('Configured and activated') >= 3, timeout=40)
+    assert session.hardware() == {'koch_follower_ros2_control': 'active'}
+    states = session.controllers()
+    assert all(states.get(name) == 'active'
+               for name in ('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS))
+    assert bus.instructions
 
 
 def follower_positions(message):
