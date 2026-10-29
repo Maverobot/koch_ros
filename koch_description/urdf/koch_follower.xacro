@@ -225,8 +225,13 @@
         <!-- <param name="enable_torque">false</param> -->
         <!-- <param name="use_dummy">true</param> -->
       </hardware>
+      <!-- Default P left a 20-30 count dead band against gear/table friction.
+           These gains settle unloaded moves within ~1-2 counts; loaded joints
+           still sag, so the elbow uses P 2400 against gravity.
+           Profile_Velocity is intentionally left unset (servo default 0). -->
       <joint name="follower_joint1">
         <param name="id">1</param>
+        <param name="Position_P_Gain">1280</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -235,6 +240,7 @@
       </joint>
       <joint name="follower_joint2">
         <param name="id">2</param>
+        <param name="Position_P_Gain">1280</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -243,6 +249,8 @@
       </joint>
       <joint name="follower_joint3">
         <param name="id">3</param>
+        <param name="Position_P_Gain">2400</param>
+        <param name="Position_D_Gain">600</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -251,6 +259,8 @@
       </joint>
       <joint name="follower_joint4">
         <param name="id">4</param>
+        <param name="Position_P_Gain">1200</param>
+        <param name="Position_D_Gain">600</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -259,6 +269,8 @@
       </joint>
       <joint name="follower_joint5">
         <param name="id">5</param>
+        <param name="Position_P_Gain">1200</param>
+        <param name="Position_D_Gain">600</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -267,6 +279,8 @@
       </joint>
       <joint name="follower_joint_gripper">
         <param name="id">6</param>
+        <param name="Position_P_Gain">1200</param>
+        <param name="Position_D_Gain">600</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>

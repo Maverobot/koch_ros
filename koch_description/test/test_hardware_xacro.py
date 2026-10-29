@@ -84,6 +84,19 @@ def test_hardware_selection(model, arms, hardware, plugin):
                     assert not gpio.findall('command_interface')
         else:
             assert not gpios
+        if hardware != 'mock':
+            components = joints if hardware == 'legacy' else gpios
+            separator = '_' if hardware == 'legacy' else ' '
+            for index, component in enumerate(components):
+                p_name = separator.join(['Position', 'P', 'Gain'])
+                d_name = separator.join(['Position', 'D', 'Gain'])
+                p_gain = component.findtext(f'param[@name="{p_name}"]')
+                d_gain = component.findtext(f'param[@name="{d_name}"]')
+                if arm == 'follower':
+                    assert p_gain == str([1280, 1280, 2400, 1200, 1200, 1200][index])
+                    assert d_gain == ('600' if index >= 2 else None)
+                else:
+                    assert p_gain is None and d_gain is None
 
 
 def test_invalid_hardware_is_rejected():

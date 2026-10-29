@@ -21,6 +21,16 @@
       <param name="type">dxl</param>
       <param name="ID">${id}</param>
       <param name="Operating Mode">3</param>
+      <xacro:if value="${arm == 'follower'}">
+        <!-- Default P left a 20-30 count dead band against gear/table friction.
+             These gains settle unloaded moves within ~1-2 counts; loaded joints
+             still sag, so the elbow uses P 2400 against gravity.
+             Profile_Velocity is intentionally left unset (servo default 0). -->
+        <param name="Position P Gain">${1280 if id &lt;= 2 else 2400 if id == 3 else 1200}</param>
+        <xacro:if value="${id &gt;= 3}">
+          <param name="Position D Gain">600</param>
+        </xacro:if>
+      </xacro:if>
       <xacro:if value="${arm == 'leader'}">
         <param name="Torque Enable">0</param>
       </xacro:if>

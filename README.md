@@ -56,7 +56,7 @@ motor current. Explicit unit overrides also prevent unsigned negative XL430 load
 Mechanically support the follower before startup or shutdown. Initialization
 requires torque off, explicitly sets `disable_torque_at_init=false`, and writes
 Operating Mode 3 to EEPROM on every normal startup. It also configures indirect
-addresses in RAM. It does not write limits, offsets or profiles. Activation reads
+addresses and follower position gains in RAM (see the xacros). It does not write limits, offsets or profiles. Activation reads
 the measured pose, seeds Goal Position **before** enabling follower torque, and
 leaves the leader torque-off. Claw control subsequently commands its configured
 initial arm pose and opens the gripper; this is independent of driver seeding.
@@ -64,7 +64,8 @@ initial arm pose and opens the gripper; this is independent of driver seeding.
 **Upstream 1.5.1 limitation:** torque checks and initialization happen per GPIO,
 not as a whole-bus preflight. If an already torque-on servo is encountered,
 activation is refused, with no torque or goal writes; preceding torque-off servos
-may already have received Operating Mode 3 EEPROM writes. Nothing is written to
+may already have received Operating Mode 3 EEPROM and follower gain RAM writes.
+Nothing is written to
 the torque-on servo or later servos. Turn all servos off safely before startup.
 
 `error_timeout_ms=500` is shared by activation and accumulated failed-read

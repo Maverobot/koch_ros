@@ -185,6 +185,14 @@ class DriverSession:
         self.context.shutdown()
 
 
+def follower_gain_registers(servo_id):
+    """Return the validated gain RAM settings replayed from e1c2142."""
+    gains = {84: [1280, 1280, 2400, 1200, 1200, 1200][servo_id - 1]}
+    if servo_id >= 3:
+        gains[80] = 600
+    return gains
+
+
 @pytest.mark.parametrize('torque_on_id', [1, 6])
 def test_robotis_refuses_torque_on_without_writes(tmp_path, torque_on_id):
     """Refusal preserves torque/goals; earlier servos may get mode writes."""
@@ -204,9 +212,12 @@ def test_robotis_refuses_torque_on_without_writes(tmp_path, torque_on_id):
         # whole bus first. Earlier torque-off servos can receive mode writes.
         for write in bus.writes:
             assert write['id'] < torque_on_id
-            assert write['address'] == 11 and write['data'] == [3]
+            allowed = {11: 3, **follower_gain_registers(write['id'])}
+            assert write['address'] in allowed
+            assert int.from_bytes(bytes(write['data']), 'little') == allowed[write['address']]
             assert write['torque'] == 0 and write['error'] == 0
-        assert len(bus.writes) == torque_on_id - 1
+        assert len(bus.writes) == sum(
+            1 + len(follower_gain_registers(i)) for i in range(1, torque_on_id))
     finally:
         if session:
             session.close()
@@ -245,6 +256,11 @@ def test_robotis_startup_goal_before_torque(tmp_path):
             goal = next(w for w in writes if w['resolved'] == [116, 117, 118, 119])
             enable = next(w for w in writes if w['address'] == 64 and w['data'] == [1])
             assert goal['time'] < enable['time']
+            gain_writes = [w for w in writes if w['address'] in (80, 82, 84)]
+            assert {w['address']: int.from_bytes(bytes(w['data']), 'little')
+                    for w in gain_writes} == follower_gain_registers(i)
+            assert len(gain_writes) == len(follower_gain_registers(i))
+            assert all(w['time'] < goal['time'] and w['torque'] == 0 for w in gain_writes)
             assert int.from_bytes(bytes(goal['data']), 'little') == 2048 + 10 * (i - 1)
     finally:
         if session:
