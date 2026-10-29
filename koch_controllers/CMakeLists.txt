@@ -48,7 +48,7 @@ install(DIRECTORY config/
   DESTINATION share/${PROJECT_NAME}/config
 )
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} kinematics
   LIBRARY DESTINATION lib)
 
 install(FILES
