@@ -64,3 +64,36 @@ def test_fast_reply_is_unstuffed_and_has_final_crc():
         assert crc16(response[:-2]) == number(response[-2:])
     finally:
         bus.close()
+
+
+def test_hardware_error_sets_alert_in_all_status_formats():
+    """Ping, ordinary and Fast replies expose hardware-error Alert without losing data."""
+    bus = DynamixelBus()
+    try:
+        bus.set_register(1, 70, 1, 4)
+        for response in [bus._dispatch(1, 1, b''), bus._reply(1, b'\x01\x02'),
+                         bus._group_read([(1, 132, 4)], True)]:
+            assert response[8] == 0x80
+            assert crc16(response[:-2]) == number(response[-2:])
+        bus.error_status_ids.add(1)
+        response = bus._group_read([(1, 132, 4)], False)
+        assert response[8] == 0x84
+        assert number(response[5:7]) == 4  # error-only, no register bytes
+        assert crc16(response[:-2]) == number(response[-2:])
+    finally:
+        bus.close()
+
+
+def test_short_fast_fault_has_a_valid_crc_and_short_length():
+    """Malformed-length regression must not accidentally test CRC rejection instead."""
+    bus = DynamixelBus()
+    try:
+        bus.short_fast_cycles = 1
+        response = bus._group_read([(i, 132, 4) for i in range(1, 7)], True)
+        assert number(response[5:7]) == 1 + 3 * (4 + 4)
+        assert len(response) == number(response[5:7]) + 7
+        assert crc16(response[:-2]) == number(response[-2:])
+        assert bus.fault_events[-1][1] == 'short_fast'
+        assert not bus.valid_group_replies
+    finally:
+        bus.close()

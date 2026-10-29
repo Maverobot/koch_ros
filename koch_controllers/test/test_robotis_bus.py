@@ -70,7 +70,8 @@ def wait_for(predicate, timeout=15):
 class DriverSession:
     """Run real controller manager and RSP, with verified simulator ports."""
 
-    def __init__(self, directory, follower, leader=None, *, custom=False, launch=None):
+    def __init__(self, directory, follower, leader=None, *, custom=False, launch=None,
+                 hardware='robotis'):
         self.directory = directory
         self.processes = []
         self.logs = []
@@ -93,10 +94,12 @@ class DriverSession:
             assert os.ttyname(bus.slave) == bus.port
         share = Path(get_package_share_directory('koch_description'))
         model = 'koch.xacro' if leader else 'koch_follower_standalone.xacro'
-        mappings = {'hardware': 'mock' if launch else 'robotis'}
+        mappings = {'hardware': 'mock' if launch else hardware}
         mappings.update({f'{arm}_port': bus.port for arm, bus in buses.items()})
         urdf = xacro.process_file(str(share / 'urdf' / model), mappings=mappings).toxml()
-        ports = ET.fromstring(urdf).findall('./ros2_control/hardware/param[@name="port_name"]')
+        port_param = 'usb_port' if hardware == 'legacy' else 'port_name'
+        ports = ET.fromstring(urdf).findall(
+            f'./ros2_control/hardware/param[@name="{port_param}"]')
         if not launch:
             assert {p.text for p in ports} == {b.port for b in buses.values()}
         if launch:
@@ -114,11 +117,27 @@ class DriverSession:
             config = (Path(get_package_share_directory('koch_controllers'))
                       / 'config' / 'koch_controllers.yaml' if custom
                       else share / 'config' / 'controllers.yaml')
-            self.start('controller_manager', 'ros2_control_node', [
+            self.manager = self.start('controller_manager', 'ros2_control_node', [
                 '--ros-args', '--params-file', str(config)])
+            self.assert_overlay_sdk()
         except Exception:
             self.close()
             raise
+
+    def assert_overlay_sdk(self):
+        """Fail unless this process mapped the SDK from the Koch workspace overlay."""
+        expected = (Path(get_package_prefix('koch_controllers')).parent
+                    / 'dynamixel_sdk/lib/libdynamixel_sdk.so').resolve()
+        assert expected.is_file(), f'Build the patched SDK overlay first: {expected}'
+        maps_path = Path(f'/proc/{self.manager.pid}/maps')
+        wait_for(lambda: self.manager.poll() is not None
+                 or 'libdynamixel_sdk.so' in maps_path.read_text())
+        assert self.manager.poll() is None, self.text()
+        mappings = maps_path.read_text()
+        libraries = {Path(line.split()[-1]).resolve() for line in mappings.splitlines()
+                     if 'libdynamixel_sdk.so' in line}
+        assert libraries == {expected}, f'Wrong SDK mapped: {libraries}; expected {expected}'
+        (self.directory / 'sdk-maps.txt').write_text(mappings)
 
     def start(self, package, executable, args):
         """Start a tracked process without shell expansion or a ROS daemon."""
@@ -320,27 +339,13 @@ def assert_only_reported_positions(session, bus):
 
 
 def test_robotis_read_faults_hold_state_then_deactivate(tmp_path):
-    """Transient faults retain real samples; sustained faults stop controllers."""
+    """Sustained dropped reads retain real samples and stop controllers."""
     bus = DynamixelBus()
     session = None
     try:
         session = DriverSession(tmp_path, bus)
         session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
         session.wait(lambda: len(session.messages) >= 5)
-        bus.drop_cycles = 1
-        session.wait(lambda: bus.drop_cycles == 0)
-        count = len(bus.reads)
-        session.wait(lambda: len(bus.reads) > count + 18)
-        assert all(session.controllers()[name] == 'active' for name in TRAJECTORY_CONTROLLERS)
-        assert session.hardware()['koch_follower_ros2_control'] == 'active'
-        bus.silent_cycles[3] = 1
-        session.wait(lambda: bus.silent_cycles[3] == 0)
-        count = len(bus.reads)
-        session.wait(lambda: len(bus.reads) > count + 18)
-        assert all(session.controllers()[name] == 'active' for name in TRAJECTORY_CONTROLLERS)
-        assert session.hardware()['koch_follower_ros2_control'] == 'active'
-        assert_only_reported_positions(session, bus)
-
         start = time.monotonic()
         bus.drop_forever = True
         session.wait(lambda: session.hardware()['koch_follower_ros2_control'] != 'active')
@@ -566,3 +571,191 @@ def assert_independent_trajectory_goals(session):
     finally:
         for client in clients:
             client.destroy()
+
+
+@pytest.fixture
+def bus_session(tmp_path):
+    """Own a simulator/session and retain wire artifacts even on assertion failure."""
+    buses, sessions = [], []
+
+    def start(bus, hardware='robotis'):
+        buses.append(bus)
+        session = DriverSession(tmp_path, bus, hardware=hardware)
+        sessions.append(session)
+        return session
+
+    yield start
+    for session in reversed(sessions):
+        session.close()
+    for bus in buses:
+        (tmp_path / 'bus-writes.json').write_text(json.dumps(bus.writes, indent=2))
+        (tmp_path / 'bus-instructions.json').write_text(json.dumps(bus.instructions, indent=2))
+        (tmp_path / 'fault-events.json').write_text(json.dumps(bus.fault_events, indent=2))
+        bus.close()
+
+
+def follower_positions(message):
+    """Select joint positions rather than the additional raw GPIO state entries."""
+    return {name: position for name, position in zip(message.name, message.position)
+            if name.startswith('follower_joint')}
+
+
+def assert_held_positions(session, first, expected):
+    """Check every published sample since injection, not only the final sample."""
+    assert len(session.messages) > first
+    for message in session.messages[first:]:
+        assert follower_positions(message) == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize('fast', [True, False], ids=['fast_bulk', 'bulk'])
+@pytest.mark.parametrize('fault', ['drop', 'crc', 'silent'])
+def test_robotis_transient_fault_is_observed(bus_session, fast, fault):
+    """Every injected fault reaches the driver; both read modes retain valid states."""
+    bus = DynamixelBus(fast_read=fast)
+    session = bus_session(bus)
+    session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
+    session.wait(lambda: len(session.messages) >= 5)
+    first = len(session.messages)
+    expected = follower_positions(session.messages[-1])
+    failures = session.text().count('Dynamixel Read Fail (Duration:')
+    if fault == 'drop':
+        bus.drop_cycles = 1
+    elif fault == 'crc':
+        bus.corrupt_cycles = 1
+    else:
+        bus.silent_cycles[3] = 1
+    session.wait(lambda: any(kind == fault and mode == fast for _, kind, mode in bus.fault_events)
+                 and session.text().count('Dynamixel Read Fail (Duration:') > failures)
+    session.wait(lambda: len(session.messages) >= first + 5)
+    assert_held_positions(session, first, expected)
+    assert_only_reported_positions(session, bus)
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+    assert all(session.controllers()[name] == 'active' for name in TRAJECTORY_CONTROLLERS)
+
+
+def test_robotis_error_only_bulk_reply_holds_then_times_out(bus_session):
+    """CRC-valid error status without data must count as a failed ordinary read."""
+    bus = DynamixelBus(fast_read=False)
+    session = bus_session(bus)
+    session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
+    session.wait(lambda: len(session.messages) >= 5)
+    first = len(session.messages)
+    expected = follower_positions(session.messages[-1])
+    bus.error_status_ids.add(3)
+    session.wait(lambda: 'Dynamixel Read Fail (Duration:' in session.text())
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+    session.wait(lambda: session.hardware()['koch_follower_ros2_control'] != 'active')
+    durations = re.findall(r'Dynamixel Read Fail \(Duration: ([0-9.]+)ms/500ms\)', session.text())
+    assert float(durations[-1]) >= 500
+    assert any(kind == 'error_status' for _, kind, _ in bus.fault_events)
+    assert_held_positions(session, first, expected)
+    assert all(session.controllers()[name] != 'active' for name in TRAJECTORY_CONTROLLERS)
+    assert not any(w['address'] == 64 and w['data'] == [0] for w in bus.writes)
+
+
+def test_robotis_short_first_fast_reply_never_seeds_fake_goal(bus_session):
+    """Reject a CRC-valid truncated aggregate before seeding or enabling torque."""
+    bus = DynamixelBus()
+    bus.short_fast_cycles = 1
+    session = bus_session(bus)
+    session.wait(lambda: 'Dynamixel Hardware Start!' in session.text())
+    assert len([e for e in bus.fault_events if e[1] == 'short_fast']) == 1
+    assert 'FastBulkRead TxRx failed (attempt 1/10)' in session.text()
+    assert bus.valid_group_replies
+    for write in bus.writes:
+        if 116 in write['resolved']:
+            raw = int.from_bytes(bytes(write['data']), 'little')
+            assert raw == 2048 + 10 * (write['id'] - 1)
+            assert write['time'] > bus.valid_group_replies[0]
+        if write['address'] == 64 and write['data'] == [1]:
+            assert write['time'] > bus.valid_group_replies[0]
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+
+
+def test_robotis_short_runtime_fast_reply_holds_state(bus_session):
+    """A truncated Fast aggregate cannot replace a previously valid state."""
+    bus = DynamixelBus()
+    session = bus_session(bus)
+    session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
+    session.wait(lambda: len(session.messages) >= 5)
+    first = len(session.messages)
+    expected = follower_positions(session.messages[-1])
+    bus.short_fast_cycles = 1
+    session.wait(lambda: 'Dynamixel Read Fail (Duration:' in session.text())
+    session.wait(lambda: len(session.messages) >= first + 5)
+    assert any(kind == 'short_fast' for _, kind, _ in bus.fault_events)
+    assert_held_positions(session, first, expected)
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+
+
+@pytest.mark.parametrize('fast', [True, False], ids=['fast_bulk', 'bulk'])
+def test_robotis_alert_only_keeps_runtime_data_valid(bus_session, fast):
+    """An Alert-only status preserves data and remains diagnostic after activation."""
+    bus = DynamixelBus(fast_read=fast)
+    session = bus_session(bus)
+    session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
+    session.wait(lambda: len(session.messages) >= 5)
+    failures = session.text().count('Dynamixel Read Fail (Duration:')
+    bus.set_register(3, 70, 1, 4)
+    bus.set_register(3, 126, 2, -123)
+    session.wait(lambda: session.messages[-1].effort[
+        session.messages[-1].name.index('follower_joint3')] == pytest.approx(-123 * 2.69))
+    assert session.text().count('Dynamixel Read Fail (Duration:') == failures
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+    assert all(session.controllers()[name] == 'active' for name in TRAJECTORY_CONTROLLERS)
+
+
+def test_robotis_ping_alert_reboots_before_torque_refusal(bus_session):
+    """Pin the upstream hazard: ping Alert reboots an already torque-on joint."""
+    bus = DynamixelBus(torque_on=(3,))
+    bus.set_register(3, 70, 1, 4)
+    session = bus_session(bus)
+    session.wait(lambda: 'Dynamixel Hardware Start!' in session.text())
+    assert len(bus.reboots) == 1
+    reboot_time, servo_id, torque = bus.reboots[0]
+    assert (servo_id, torque) == (3, 1)
+    torque_reads = [t for t, i, addr, _ in bus.reads if i == 3 and addr == 64]
+    assert torque_reads and min(torque_reads) > reboot_time
+    assert 'Torque is enabled, cannot proceed' not in session.text()
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+
+
+def test_legacy_error_only_sync_reply_holds_state(bus_session):
+    """Verify fixed legacy driver plus overlay SDK rejects error-only Sync replies."""
+    from ament_index_python.packages import PackageNotFoundError
+    try:
+        get_package_prefix('dynamixel_hardware')
+    except PackageNotFoundError:
+        pytest.skip('Optional fixed legacy driver underlay is not sourced')
+    bus = DynamixelBus()
+    # Legacy enables torque before its first read. Give the simulated servo a
+    # matching goal at rest so this check isolates read validation, not seeding.
+    for i in range(1, 7):
+        bus.set_register(i, 116, 4, 2048 + 10 * (i - 1))
+    session = bus_session(bus, hardware='legacy')
+    session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
+    session.wait(lambda: len(session.messages) >= 5)
+    first = len(session.messages)
+    expected = follower_positions(session.messages[-1])
+    bus.error_status_ids.add(3)
+    session.wait(lambda: 'read failures for' in session.text())
+    assert any(instruction == 0x82 for _, _, instruction, _ in bus.instructions)
+    session.wait(lambda: len(session.messages) >= first + 3)
+    assert_held_positions(session, first, expected)
+    bus.error_status_ids.clear()
+    session.wait(lambda: 'Communication recovered after read failures' in session.text())
+    assert session.hardware()['koch_follower_ros2_control'] == 'active'
+
+
+def test_robotis_hardware_error_at_activation_refuses_until_timeout(bus_session):
+    """Valid Alert data is not sufficient for startup while Hardware Error is set."""
+    bus = DynamixelBus()
+    # Introduce the error after ping, avoiding the separate ping/reboot path.
+    bus.hardware_errors_at_group_read[3] = 4
+    session = bus_session(bus)
+    session.wait(lambda: 'Dynamixel Start Fail (Timeout:' in session.text())
+    duration = re.search(r'Dynamixel Start Fail \(Timeout: ([0-9.]+)ms/500ms', session.text())
+    assert duration and float(duration.group(1)) >= 500
+    assert session.hardware()['koch_follower_ros2_control'] != 'active'
+    assert not any(116 in w['resolved'] or w['address'] == 64 for w in bus.writes)
+    assert not bus.reboots

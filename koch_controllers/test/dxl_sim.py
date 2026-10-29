@@ -92,6 +92,13 @@ class DynamixelBus:
         self.silent_ids = set()
         self.silent_cycles = {}
         self.corrupt_cycles = 0
+        self.error_status_ids = set()
+        self.hardware_errors_at_group_read = {}
+        self.short_fast_cycles = 0
+        self.fault_events = []
+        self.valid_group_replies = []
+        self.reboots = []
+        self.ignored_protocol1_pings = []
         self.error = None
         self.stopping = threading.Event()
         self.thread = threading.Thread(target=self._run, name='dxl_sim', daemon=True)
@@ -133,31 +140,56 @@ class DynamixelBus:
             memory[132:136] = memory[116:120]
         return 0
 
+    def _alert(self, servo_id):
+        return 0x80 if self.registers[servo_id][70] else 0
+
     def _reply(self, servo_id, data=b'', error=0):
-        return packet(servo_id, bytes([0x55, error]) + data)
+        return packet(servo_id, bytes([0x55, error | self._alert(servo_id)]) + data)
 
     def _group_read(self, requests, fast):
+        for servo_id, value in self.hardware_errors_at_group_read.items():
+            self.set_register(servo_id, 70, 1, value)
         if self.drop_forever or self.drop_cycles:
+            self.fault_events.append((time.monotonic(), 'drop', fast))
             self.drop_cycles = max(0, self.drop_cycles - 1)
             return b''
         silent = self.silent_ids | {i for i, count in self.silent_cycles.items() if count}
         self.silent_cycles = {i: max(0, count - 1) for i, count in self.silent_cycles.items()}
+        if any(i in silent for i, _, _ in requests):
+            self.fault_events.append((time.monotonic(), 'silent', fast))
         if fast and (not self.fast_read or any(i in silent for i, _, _ in requests)):
             return b''
+        faulty = bool(silent or self.error_status_ids or self.corrupt_cycles)
+        if fast and self.short_fast_cycles:
+            self.short_fast_cycles -= 1
+            self.fault_events.append((time.monotonic(), 'short_fast', fast))
+            requests = requests[:3]
+            faulty = True
         if fast:
             # Fast replies are one unstuffed broadcast status. Each segment has
             # error, ID, data, cumulative CRC, including the final packet CRC.
             length = 1 + sum(size + 4 for _, _, size in requests)
             result = HEADER + b'\xfe' + word(length) + b'\x55'
             for i, addr, size in requests:
-                result += bytes([0, i]) + self._read(i, addr, size)
+                result += bytes([self._alert(i), i]) + self._read(i, addr, size)
                 result += word(crc16(result))
         else:
-            result = b''.join(self._reply(i, self._read(i, addr, size))
-                              for i, addr, size in requests if i not in silent)
+            replies = []
+            for i, addr, size in requests:
+                if i in silent:
+                    continue
+                if i in self.error_status_ids:
+                    self.fault_events.append((time.monotonic(), 'error_status', fast))
+                    replies.append(self._reply(i, error=4))
+                else:
+                    replies.append(self._reply(i, self._read(i, addr, size)))
+            result = b''.join(replies)
         if self.corrupt_cycles:
+            self.fault_events.append((time.monotonic(), 'crc', fast))
             self.corrupt_cycles -= 1
             result = result[:-1] + bytes([result[-1] ^ 1])
+        if not faulty:
+            self.valid_group_replies.append(time.monotonic())
         return result
 
     def _dispatch(self, servo_id, instruction, params):
@@ -176,6 +208,7 @@ class DynamixelBus:
             error = self._write(servo_id, number(params[:2]), params[2:])
             return self._reply(servo_id, error=error)
         if instruction == 8:
+            self.reboots.append((time.monotonic(), servo_id, self.registers[servo_id][64]))
             self.set_register(servo_id, 64, 1, 0)
             self.set_register(servo_id, 70, 1, 0)
             return self._reply(servo_id)
@@ -208,7 +241,20 @@ class DynamixelBus:
                 if not select.select([self.master], [], [], 0.02)[0]:
                     continue
                 buffer += os.read(self.master, 65536)
-                while len(buffer) >= 7:
+                while len(buffer) >= 6:
+                    # Workbench probes Protocol 1 first. A Protocol 2 servo
+                    # ignores that ping; no Protocol 1 registers are emulated.
+                    if buffer.startswith(b'\xff\xff') and buffer[2] != 0xfd:
+                        length = buffer[3] + 4
+                        if len(buffer) < length:
+                            break
+                        frame, buffer = buffer[:length], buffer[length:]
+                        assert frame[3:5] == b'\x02\x01', frame.hex()
+                        assert frame[-1] == (~sum(frame[2:-1]) & 0xff)
+                        self.ignored_protocol1_pings.append((time.monotonic(), frame[2]))
+                        continue
+                    if len(buffer) < 7:
+                        break
                     assert buffer.startswith(HEADER), buffer.hex()
                     length = 7 + number(buffer[5:7])
                     if len(buffer) < length:
