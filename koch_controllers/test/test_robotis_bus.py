@@ -33,6 +33,7 @@ import xml.etree.ElementTree as ET
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from control_msgs.action import FollowJointTrajectory
 from controller_manager_msgs.srv import ListControllers, ListHardwareComponents
+from dxl_reply_checks import assert_transient_reply
 from dxl_sim import DynamixelBus
 from geometry_msgs.msg import TwistStamped
 import numpy as np
@@ -591,6 +592,8 @@ def bus_session(tmp_path):
         (tmp_path / 'bus-writes.json').write_text(json.dumps(bus.writes, indent=2))
         (tmp_path / 'bus-instructions.json').write_text(json.dumps(bus.instructions, indent=2))
         (tmp_path / 'fault-events.json').write_text(json.dumps(bus.fault_events, indent=2))
+        (tmp_path / 'group-transactions.json').write_text(
+            json.dumps(bus.group_transactions, indent=2))
         bus.close()
 
 
@@ -617,15 +620,35 @@ def test_robotis_transient_fault_is_observed(bus_session, fast, fault):
     session.wait(lambda: len(session.messages) >= 5)
     first = len(session.messages)
     expected = follower_positions(session.messages[-1])
-    failures = session.text().count('Dynamixel Read Fail (Duration:')
+    window_start = len(bus.group_transactions) - 2
+    assert window_start >= 0
     if fault == 'drop':
         bus.drop_cycles = 1
     elif fault == 'crc':
         bus.corrupt_cycles = 1
     else:
         bus.silent_cycles[3] = 1
-    session.wait(lambda: any(kind == fault and mode == fast for _, kind, mode in bus.fault_events)
-                 and session.text().count('Dynamixel Read Fail (Duration:') > failures)
+    session.wait(lambda: any(tx['faults'] for tx in bus.group_transactions[window_start:]))
+    injected_indices = [index for index, tx in enumerate(bus.group_transactions)
+                        if any(kind == fault and mode == fast for _, kind, mode in tx['faults'])]
+    assert len(injected_indices) == 1
+    index = injected_indices[0]
+    session.wait(lambda: len(bus.group_transactions) >= index + 4)
+    transactions = bus.group_transactions
+    assert_transient_reply(fault, fast, bytes.fromhex(transactions[index - 1]['reply']),
+                           bytes.fromhex(transactions[index]['reply']))
+    # The driver logs after receiving this reply and before requesting the next
+    # group. Require exactly that failure, with no unrelated failures in the
+    # two-clean-reads-before / two-clean-reads-after window.
+    failures = [float(stamp) for stamp in re.findall(
+        r'\[([0-9]+\.[0-9]+)\] \[dynamixel_hardware_interface\]: '
+        r'Dynamixel Read Fail \(Duration:', session.text())]
+    in_window = [stamp for stamp in failures
+                 if transactions[window_start]['received_at'] <= stamp
+                 < transactions[index + 3]['received_at']]
+    assert len(in_window) == 1, f'Expected exactly one injected read failure: {in_window}'
+    assert (transactions[index]['received_at'] <= in_window[0]
+            < transactions[index + 1]['received_at'])
     session.wait(lambda: len(session.messages) >= first + 5)
     assert_held_positions(session, first, expected)
     assert_only_reported_positions(session, bus)

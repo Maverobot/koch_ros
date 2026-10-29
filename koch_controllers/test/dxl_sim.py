@@ -96,6 +96,7 @@ class DynamixelBus:
         self.hardware_errors_at_group_read = {}
         self.short_fast_cycles = 0
         self.fault_events = []
+        self.group_transactions = []
         self.valid_group_replies = []
         self.reboots = []
         self.ignored_protocol1_pings = []
@@ -262,9 +263,18 @@ class DynamixelBus:
                     frame, buffer = buffer[:length], buffer[length:]
                     assert crc16(frame[:-2]) == number(frame[-2:])
                     body = frame[7:-2].replace(b'\xff\xff\xfd\xfd', b'\xff\xff\xfd')
+                    received_at = time.time()
+                    first_event = len(self.fault_events)
                     reply = self._dispatch(frame[4], body[0], body[1:])
                     if reply:
-                        os.write(self.master, reply)
+                        assert os.write(self.master, reply) == len(reply)
+                    if body[0] in (0x82, 0x8a, 0x92, 0x9a):
+                        # Wall-clock request times bracket ROS log timestamps for
+                        # this transaction; record bytes actually sent to the pty.
+                        self.group_transactions.append({
+                            'received_at': received_at, 'instruction': body[0],
+                            'reply': reply.hex(), 'faults': self.fault_events[first_event:],
+                        })
         except Exception as exc:
             self.error = exc
 

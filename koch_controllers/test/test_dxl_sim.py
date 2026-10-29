@@ -20,6 +20,7 @@
 
 """Protocol/register checks independent of the driver's integration assertions."""
 
+from dxl_reply_checks import assert_transient_reply
 from dxl_sim import crc16, DynamixelBus, HEADER, number, packet, word
 import pytest
 
@@ -95,5 +96,28 @@ def test_short_fast_fault_has_a_valid_crc_and_short_length():
         assert crc16(response[:-2]) == number(response[-2:])
         assert bus.fault_events[-1][1] == 'short_fast'
         assert not bus.valid_group_replies
+    finally:
+        bus.close()
+
+
+@pytest.mark.parametrize('fast', [True, False], ids=['fast_bulk', 'bulk'])
+@pytest.mark.parametrize('fault', ['drop', 'crc', 'silent'])
+def test_transient_fault_changes_reply_bytes(fast, fault):
+    """Deterministically check each fault's bytes and its single-transaction lifetime."""
+    bus = DynamixelBus()
+    try:
+        requests = [(i, 132, 4) for i in range(1, 7)]
+        normal = bus._group_read(requests, fast)
+        if fault == 'drop':
+            bus.drop_cycles = 1
+        elif fault == 'crc':
+            bus.corrupt_cycles = 1
+        else:
+            bus.silent_cycles[3] = 1
+        injected = bus._group_read(requests, fast)
+        assert_transient_reply(fault, fast, normal, injected)
+        assert bus._group_read(requests, fast) == normal
+        assert len(bus.fault_events) == 1
+        assert bus.fault_events[0][1:] == (fault, fast)
     finally:
         bus.close()
