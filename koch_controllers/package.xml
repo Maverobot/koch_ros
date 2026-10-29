@@ -14,12 +14,17 @@
   <depend>pluginlib</depend>
   <depend>geometry_msgs</depend>
 
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+
   <test_depend>ament_cmake_ros</test_depend>
   <test_depend>ament_index_python</test_depend>
   <test_depend>control_msgs</test_depend>
   <test_depend>controller_manager</test_depend>
   <test_depend>controller_manager_msgs</test_depend>
   <test_depend>dynamixel_hardware_interface</test_depend>
+  <test_depend>joint_state_broadcaster</test_depend>
+  <test_depend>joint_trajectory_controller</test_depend>
   <test_depend>koch_description</test_depend>
   <test_depend>python3-numpy</test_depend>
   <test_depend>python3-pytest</test_depend>
