@@ -1,7 +1,9 @@
 <?xml version="1.0" ?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:macro name="koch_leader" params="parent_link:='' xyz:='0 0 0' rpy:='0 0 0'" >
+  <xacro:include filename="$(find koch_description)/urdf/koch_hardware.xacro"/>
+
+  <xacro:macro name="koch_leader" params="parent_link:='' xyz:='0 0 0' rpy:='0 0 0' hardware:='robotis' port:='/dev/ttyACM1'" >
 
     <xacro:unless value="${parent_link == ''}">
       <joint name="$leader_{parent_link}_joint" type="fixed">
@@ -206,10 +208,11 @@
       <limit lower="-${pi}" upper="${pi}" effort="1000.0" velocity="10.0"/>
     </joint>
 
+    <xacro:if value="${hardware == 'legacy'}">
     <ros2_control name="koch_leader_ros2_control" type="system">
       <hardware>
         <plugin>dynamixel_hardware/DynamixelHardware</plugin>
-        <param name="usb_port">/dev/ttyACM1</param>
+        <param name="usb_port">${port}</param>
         <param name="baud_rate">1000000</param>
         <param name="enable_torque">false</param>
         <!-- <param name="use_dummy">true</param> -->
@@ -263,6 +266,10 @@
         <state_interface name="effort"/>
       </joint>
     </ros2_control>
+    </xacro:if>
+    <xacro:unless value="${hardware == 'legacy'}">
+      <xacro:koch_hardware arm="leader" hardware="${hardware}" port="${port}"/>
+    </xacro:unless>
 
   </xacro:macro>
 </robot>

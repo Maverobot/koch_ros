@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <robot name="koch" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
+  <xacro:arg name="hardware" default="robotis"/>
+  <xacro:arg name="follower_port" default="/dev/ttyACM0"/>
+  <xacro:arg name="leader_port" default="/dev/ttyACM1"/>
+
   <xacro:include filename="$(find koch_description)/urdf/materials.xacro" />
   <xacro:include filename="$(find koch_description)/urdf/koch.trans" />
   <xacro:include filename="$(find koch_description)/urdf/koch.gazebo" />
@@ -14,7 +18,7 @@
   <xacro:configure_transmissions prefix="follower_"/>
 
   <link name="base_link"/>
-  <xacro:koch_follower parent_link="base_link" xyz="-0.2 0 0" />
-  <xacro:koch_leader parent_link="base_link" xyz="0.2 0 0" />
+  <xacro:koch_follower hardware="$(arg hardware)" port="$(arg follower_port)" parent_link="base_link" xyz="-0.2 0 0" />
+  <xacro:koch_leader hardware="$(arg hardware)" port="$(arg leader_port)" parent_link="base_link" xyz="0.2 0 0" />
 
 </robot>

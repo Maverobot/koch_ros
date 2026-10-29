@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- Joint/GPIO order, not names, defines the ROBOTIS identity transmission. -->
+  <xacro:macro name="koch_hardware_joint" params="arm suffix hardware initial_position">
+    <joint name="${arm}_joint${suffix}">
+      <xacro:if value="${arm == 'follower'}">
+        <command_interface name="position"/>
+      </xacro:if>
+      <state_interface name="position">
+        <xacro:if value="${hardware == 'mock'}">
+          <param name="initial_value">${initial_position}</param>
+        </xacro:if>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="koch_hardware_gpio" params="arm id">
+    <gpio name="${arm}_dxl${id}">
+      <param name="type">dxl</param>
+      <param name="ID">${id}</param>
+      <param name="Operating Mode">3</param>
+      <xacro:if value="${arm == 'leader'}">
+        <param name="Torque Enable">0</param>
+      </xacro:if>
+      <!-- Compatibility with legacy convertValue2Current, NOT torque in Nm. -->
+      <xacro:property name="effort_register" value="${'Present Load' if id &lt;= 2 else 'Present Current'}"/>
+      <param name="[unit info]">
+        ${effort_register}, 2.69, legacy_effort, signed, 0
+        Present Velocity, 0.023980823922402088, rad/s, signed, 0
+      </param>
+      <xacro:if value="${arm == 'follower'}">
+        <command_interface name="Goal Position"/>
+      </xacro:if>
+      <state_interface name="Present Position"/>
+      <state_interface name="Present Velocity"/>
+      <state_interface name="${effort_register}"/>
+      <state_interface name="Hardware Error Status"/>
+    </gpio>
+  </xacro:macro>
+
+  <xacro:macro name="koch_hardware" params="arm hardware port">
+    <ros2_control name="koch_${arm}_ros2_control" type="system">
+      <hardware>
+        <plugin>${dict(robotis='dynamixel_hardware_interface/DynamixelHardware', mock='mock_components/GenericSystem')[hardware]}</plugin>
+        <xacro:if value="${hardware == 'robotis'}">
+          <param name="port_name">${port}</param>
+          <param name="baud_rate">1000000</param>
+          <param name="error_timeout_ms">500</param>
+          <param name="dynamixel_model_folder">/param/dxl_model</param>
+          <param name="number_of_joints">6</param>
+          <param name="number_of_transmissions">6</param>
+          <param name="disable_torque_at_init">false</param>
+          <param name="dynamixel_state_pub_msg_name">koch_${arm}/dxl_state</param>
+          <param name="get_dynamixel_data_srv_name">koch_${arm}/get_dxl_data</param>
+          <param name="set_dynamixel_data_srv_name">koch_${arm}/set_dxl_data</param>
+          <param name="reboot_dxl_srv_name">koch_${arm}/reboot_dxl</param>
+          <param name="set_dxl_torque_srv_name">koch_${arm}/set_dxl_torque</param>
+        </xacro:if>
+      </hardware>
+      <xacro:koch_hardware_joint arm="${arm}" suffix="1" hardware="${hardware}" initial_position="${-3.14159 if arm == 'leader' else -0.08436894416809082}"/>
+      <xacro:koch_hardware_joint arm="${arm}" suffix="2" hardware="${hardware}" initial_position="-0.13805827498435974"/>
+      <xacro:koch_hardware_joint arm="${arm}" suffix="3" hardware="${hardware}" initial_position="0.09050486981868744"/>
+      <xacro:koch_hardware_joint arm="${arm}" suffix="4" hardware="${hardware}" initial_position="-1.8315731287002563"/>
+      <xacro:koch_hardware_joint arm="${arm}" suffix="5" hardware="${hardware}" initial_position="${-3.14159 if arm == 'leader' else -1.6444274187088013}"/>
+      <xacro:koch_hardware_joint arm="${arm}" suffix="_gripper" hardware="${hardware}" initial_position="-0.11198060214519501"/>
+      <xacro:if value="${hardware == 'robotis'}">
+        <xacro:koch_hardware_gpio arm="${arm}" id="1"/>
+        <xacro:koch_hardware_gpio arm="${arm}" id="2"/>
+        <xacro:koch_hardware_gpio arm="${arm}" id="3"/>
+        <xacro:koch_hardware_gpio arm="${arm}" id="4"/>
+        <xacro:koch_hardware_gpio arm="${arm}" id="5"/>
+        <xacro:koch_hardware_gpio arm="${arm}" id="6"/>
+      </xacro:if>
+    </ros2_control>
+  </xacro:macro>
+</robot>

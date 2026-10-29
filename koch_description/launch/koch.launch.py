@@ -16,8 +16,6 @@ def generate_launch_description():
     xacro_file = os.path.join(share_dir, "urdf", "koch.xacro")
     rviz_config = os.path.join(share_dir, "config", "display.rviz")
 
-    robot_description_config = xacro.process_file(xacro_file)
-
     controller_config = os.path.join(share_dir, "config", "controllers.yaml")
     print(f"Loading controller config from: {controller_config}")
 
@@ -26,8 +24,21 @@ def generate_launch_description():
         "rviz", default_value="true", description="Flag to enable RViz"
     )
 
+    hardware_args = [
+        DeclareLaunchArgument(
+            'hardware', default_value='robotis',
+            choices=['robotis', 'legacy', 'mock']),
+        DeclareLaunchArgument('follower_port', default_value='/dev/ttyACM0'),
+        DeclareLaunchArgument('leader_port', default_value='/dev/ttyACM1'),
+    ]
+
     # Function to conditionally include RViz node
     def launch_setup(context, *args, **kwargs):
+        robot_description_config = xacro.process_file(
+            xacro_file, mappings={
+                name: LaunchConfiguration(name).perform(context)
+                for name in ['hardware', 'follower_port', 'leader_port']
+            })
         use_rviz = LaunchConfiguration("rviz").perform(context) == "true"
         nodes = [
             Node(
@@ -77,4 +88,4 @@ def generate_launch_description():
 
         return nodes
 
-    return LaunchDescription([rviz_arg, OpaqueFunction(function=launch_setup)])
+    return LaunchDescription(hardware_args + [rviz_arg, OpaqueFunction(function=launch_setup)])

@@ -55,4 +55,18 @@ install(FILES
   koch_controllers.xml
   DESTINATION share/${PROJECT_NAME})
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_ros REQUIRED)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  ament_add_ros_isolated_test(test_robotis_bus
+    COMMAND ${Python3_EXECUTABLE} -m pytest
+      ${CMAKE_CURRENT_SOURCE_DIR}/test
+      --junitxml=${CMAKE_CURRENT_BINARY_DIR}/test_results/test_robotis_bus.xml
+      --basetemp=${CMAKE_CURRENT_BINARY_DIR}/test_robotis_bus
+    RESULT_FILE ${CMAKE_CURRENT_BINARY_DIR}/test_results/test_robotis_bus.xml
+    ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+    TIMEOUT 180
+  )
+endif()
+
 ament_package()
