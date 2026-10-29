@@ -55,15 +55,11 @@ def generate_launch_description():
                 executable="spawner",
                 arguments=[
                     "joint_state_broadcaster",
+                    "joint_trajectory_controller",
+                    "gripper_trajectory_controller",
                     "--controller-manager",
                     "/controller_manager",
                 ],
-                output="screen",
-            ),
-            Node(
-                package="controller_manager",
-                executable="spawner",
-                arguments=["joint_trajectory_controller", "-c", "/controller_manager"],
                 output="screen",
             ),
             Node(

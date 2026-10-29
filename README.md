@@ -117,6 +117,31 @@ buses. Simulator success alone is not a hardware safety approval.
 
 ## Controllers
 
+### Follower trajectory controllers
+
+`koch_description/launch/koch.launch.py` starts the joint state broadcaster and
+two independent position trajectory controllers:
+
+| Controller | Joints | `control_msgs/action/FollowJointTrajectory` action | `trajectory_msgs/msg/JointTrajectory` topic |
+| --- | --- | --- | --- |
+| `joint_trajectory_controller` | `follower_joint1`–`follower_joint5` | `/joint_trajectory_controller/follow_joint_trajectory` | `/joint_trajectory_controller/joint_trajectory` |
+| `gripper_trajectory_controller` | `follower_joint_gripper` | `/gripper_trajectory_controller/follow_joint_trajectory` | `/gripper_trajectory_controller/joint_trajectory` |
+
+Send five-joint arm trajectories separately from gripper trajectories. The arm
+controller sets `interpolate_from_desired_state: true` so streamed or multi-message
+references continue from the desired state rather than re-anchoring to measured
+position, which left real servos with too little error to overcome friction.
+
+Follower servo RAM gains are set at startup in `koch_hardware.xacro` (ROBOTIS)
+and `koch_follower.xacro` (legacy):
+P=1280 for joints 1–2 (XL430, D unchanged); P=2400/D=600 for joint 3 (XL330 elbow);
+P=1200/D=600 for joints 4–5 and the gripper (XL330). Default P left a 20–30 count
+dead band against gear/table friction; tuned unloaded moves settle within roughly
+1–2 counts. Loaded joints still sag; the higher elbow P reduces gravity sag.
+`Profile_Velocity` is intentionally unset (servo default 0). Leader tuning and
+joint limits are unchanged. These controllers do not change the separate
+leader-follower or claw-machine launches below.
+
 ### LeaderFollowerController
 Teleoperation controller that mirrors a leader arm's joint positions to a follower arm.
 

@@ -24,22 +24,30 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import time
 import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
+from control_msgs.action import FollowJointTrajectory
 from controller_manager_msgs.srv import ListControllers, ListHardwareComponents
 from dxl_sim import DynamixelBus
 from geometry_msgs.msg import TwistStamped
 import numpy as np
 import pytest
+from rcl_interfaces.srv import GetParameters
 import rclpy
+from rclpy.action import ActionClient
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
+from trajectory_msgs.msg import JointTrajectoryPoint
 import xacro
 import yaml
+
+
+TRAJECTORY_CONTROLLERS = ('joint_trajectory_controller', 'gripper_trajectory_controller')
 
 
 @pytest.fixture(autouse=True)
@@ -235,7 +243,7 @@ def test_robotis_startup_goal_before_torque(tmp_path):
         wait_for(lambda: 'Dynamixel Hardware Start!' in session.text()
                  or session.processes[-1].poll() is not None)
         assert 'Dynamixel Hardware Start!' in session.text(), session.text()
-        session.spawn('joint_state_broadcaster', 'joint_trajectory_controller')
+        session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
         session.wait(lambda: len(session.messages) >= 5)
         assert session.hardware()['koch_follower_ros2_control'] == 'active'
         message = session.messages[-1]
@@ -317,19 +325,19 @@ def test_robotis_read_faults_hold_state_then_deactivate(tmp_path):
     session = None
     try:
         session = DriverSession(tmp_path, bus)
-        session.spawn('joint_state_broadcaster', 'joint_trajectory_controller')
+        session.spawn('joint_state_broadcaster', *TRAJECTORY_CONTROLLERS)
         session.wait(lambda: len(session.messages) >= 5)
         bus.drop_cycles = 1
         session.wait(lambda: bus.drop_cycles == 0)
         count = len(bus.reads)
         session.wait(lambda: len(bus.reads) > count + 18)
-        assert session.controllers()['joint_trajectory_controller'] == 'active'
+        assert all(session.controllers()[name] == 'active' for name in TRAJECTORY_CONTROLLERS)
         assert session.hardware()['koch_follower_ros2_control'] == 'active'
         bus.silent_cycles[3] = 1
         session.wait(lambda: bus.silent_cycles[3] == 0)
         count = len(bus.reads)
         session.wait(lambda: len(bus.reads) > count + 18)
-        assert session.controllers()['joint_trajectory_controller'] == 'active'
+        assert all(session.controllers()[name] == 'active' for name in TRAJECTORY_CONTROLLERS)
         assert session.hardware()['koch_follower_ros2_control'] == 'active'
         assert_only_reported_positions(session, bus)
 
@@ -340,15 +348,26 @@ def test_robotis_read_faults_hold_state_then_deactivate(tmp_path):
         # One 80 Hz period can straddle the injection boundary. The driver
         # accumulates manager periods, not a separate wall-clock deadline.
         assert elapsed >= 0.48, elapsed
-        assert session.controllers()['joint_trajectory_controller'] != 'active'
+        durations = re.findall(r'Dynamixel Read Fail \(Duration: ([0-9.]+)ms/500ms\)',
+                               session.text())
+        assert durations and float(durations[-1]) >= 500
+        failed_hardware = session.hardware()
+        failed_controllers = session.controllers()
+        assert all(failed_controllers[name] != 'active' for name in TRAJECTORY_CONTROLLERS)
         assert not any(w['address'] == 64 and w['data'] == [0] for w in bus.writes)
         assert_only_reported_positions(session, bus)
         bus.drop_forever = False
         restored = time.monotonic()
         session.wait(lambda: time.monotonic() - restored >= 0.5)
         assert session.hardware()['koch_follower_ros2_control'] != 'active'
-        assert session.controllers()['joint_trajectory_controller'] != 'active'
+        assert all(session.controllers()[name] != 'active' for name in TRAJECTORY_CONTROLLERS)
         assert_only_reported_positions(session, bus)
+        (tmp_path / 'failure-observation.json').write_text(json.dumps({
+            'elapsed_seconds': elapsed, 'accumulated_failure_ms': float(durations[-1]),
+            'failed_hardware': failed_hardware, 'failed_controllers': failed_controllers,
+            'restored_hardware': session.hardware(), 'restored_controllers': session.controllers(),
+            'torque_after_restore': [bus.registers[i][64] for i in range(1, 7)],
+        }, indent=2))
     finally:
         if session:
             session.close()
@@ -489,12 +508,15 @@ def test_mock_launches(tmp_path, package, filename, controller, dual):
     try:
         session = DriverSession(tmp_path, follower, leader, launch=(package, filename))
         # Do not contend with the launch's parallel spawners during startup.
-        session.wait(lambda: 'Configured and activated' in session.text()
-                     and f'spawner_{controller}' in session.text()
-                     and session.text().count('Configured and activated') >= 2, timeout=40)
+        expected_count = 3 if controller == 'joint_trajectory_controller' else 2
+        session.wait(lambda: session.text().count('Configured and activated') >= expected_count,
+                     timeout=40)
         assert session.controllers().get(controller) == 'active'
         session.wait(lambda: len(session.messages) >= 5)
         assert all(state == 'active' for state in session.hardware().values())
+        if controller == 'joint_trajectory_controller':
+            assert session.controllers()['gripper_trajectory_controller'] == 'active'
+            assert_independent_trajectory_goals(session)
         assert not follower.instructions
         assert leader is None or not leader.instructions
     finally:
@@ -503,3 +525,44 @@ def test_mock_launches(tmp_path, package, filename, controller, dual):
         follower.close()
         if leader:
             leader.close()
+
+
+def assert_independent_trajectory_goals(session):
+    """Check split action endpoints and the live desired-state parameter."""
+    parameter_client = session.node.create_client(
+        GetParameters, '/joint_trajectory_controller/get_parameters')
+    assert parameter_client.wait_for_service(timeout_sec=5)
+    request = GetParameters.Request(names=['interpolate_from_desired_state'])
+    parameter_future = parameter_client.call_async(request)
+    session.wait(parameter_future.done)
+    assert parameter_future.result().values[0].bool_value
+    session.node.destroy_client(parameter_client)
+    clients = []
+    futures = []
+    targets = [([f'follower_joint{i}' for i in range(1, 6)], [0.1, -0.2, 0.3, -1.5, -1.4]),
+               (['follower_joint_gripper'], [0.4])]
+    try:
+        for name, (joints, positions) in zip(TRAJECTORY_CONTROLLERS, targets):
+            client = ActionClient(session.node, FollowJointTrajectory,
+                                  f'/{name}/follow_joint_trajectory')
+            clients.append(client)
+            assert client.wait_for_server(timeout_sec=5)
+            goal = FollowJointTrajectory.Goal()
+            goal.trajectory.joint_names = joints
+            point = JointTrajectoryPoint(positions=positions)
+            point.time_from_start.sec = 1
+            goal.trajectory.points = [point]
+            futures.append(client.send_goal_async(goal))
+        session.wait(lambda: all(f.done() for f in futures))
+        handles = [f.result() for f in futures]
+        assert all(h.accepted for h in handles)
+        results = [h.get_result_async() for h in handles]
+        session.wait(lambda: all(f.done() for f in results))
+        assert all(f.result().status == 4 for f in results)  # STATUS_SUCCEEDED
+        assert all(f.result().result.error_code == 0 for f in results)
+        expected = {j: value for joints, values in targets for j, value in zip(joints, values)}
+        session.wait(lambda: all(abs(session.messages[-1].position[
+            session.messages[-1].name.index(j)] - value) < 1e-6 for j, value in expected.items()))
+    finally:
+        for client in clients:
+            client.destroy()
