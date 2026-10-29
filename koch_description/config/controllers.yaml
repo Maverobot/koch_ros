@@ -23,6 +23,9 @@ position_controller:
 
 joint_trajectory_controller:
   ros__parameters:
+    # Streamed or multi-message references otherwise re-anchor each trajectory to
+    # measured position, leaving real servos only a few counts of error and stalled.
+    interpolate_from_desired_state: true
     joints:
       - follower_joint1
       - follower_joint2
