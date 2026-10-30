@@ -7,6 +7,29 @@ ROS 2 packages for the Koch v1.1 robot arm, a low-cost 6-DOF manipulator with a 
 - **koch_description**: URDF/Xacro robot description, meshes, and visualization configs
 - **koch_controllers**: Custom ros2_control controllers for the robot
 
+## Follower forearm kinematics
+
+The follower uses a **nominal 100.5 mm** forearm axis spacing: joint4 local
+`y=0.100467 m`, with unchanged `z=0.002747 m`, gives 100.50455 mm. This follows
+an approximately 100 mm ruler measurement (reported uncertainty about ±1 mm,
+2026-10-30), not precision calibration. Leader geometry is unchanged.
+
+Both custom controllers read their configured fourth follower joint's local
+`y` from their actual robot description at configuration time. Each instance
+uses that length for POE FK and space Jacobians; a frozen old description still
+uses its old length. Missing/invalid descriptions or nonpositive/nonfinite
+lengths reject configuration. No length parameter or geometry selector is added.
+The original configuration is retained at pinned baseline
+`e2291be788985babd8daa8c7ca1e0dc6c2281c65`, not as an installed alternative.
+
+**Kinematics only:** existing visual/collision meshes and inertial data are
+unadapted; the forearm meshes remain about 10 mm short and are **not accepted
+as collision/safety geometry**. Other POE approximations, endpoint/TCP and zero
+conventions remain unchanged; existing URDF/POE endpoint discrepancies and
+physical calibration are not resolved. Offline validation does not authorize
+hardware deployment or imply that old task calibrations remain valid. Review
+before regenerating descriptions or switching any running hardware stack.
+
 ## Hardware backend (ROS 2 Kilted)
 
 **The patched DynamixelSDK overlay is required for real hardware.** Stock SDK

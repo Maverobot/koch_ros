@@ -34,6 +34,23 @@ controller_interface::CallbackReturn LeaderFollowerController::on_configure(
     return controller_interface::CallbackReturn::ERROR;
   }
 
+  if (follower_joint_names_.size() != 6)
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "Follower kinematics requires exactly 6 joints.");
+    return controller_interface::CallbackReturn::ERROR;
+  }
+
+  kinematics_.reset();
+  try
+  {
+    kinematics_ = std::make_unique<const Kinematics>(get_robot_description(), follower_joint_names_.at(3));
+  }
+  catch (const std::exception & error)
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "Cannot configure follower kinematics: %s", error.what());
+    return controller_interface::CallbackReturn::ERROR;
+  }
+
   leader_to_follower_offset_ =
     this->get_node()->get_parameter("leader_to_follower_offset").as_double_array();
 
@@ -181,7 +198,7 @@ controller_interface::return_type LeaderFollowerController::update(
     dq[i] = follower_velocity_state_handles_[i].get().get_optional().value();
   }
 
-  Eigen::Matrix<double, 6, 6> Js = spaceJacobian(q);
+  Eigen::Matrix<double, 6, 6> Js = kinematics_->spaceJacobian(q);
   Eigen::Matrix<double, 6, 1> twist = Js * dq;
 
   if (twist_pub_ && twist_pub_->get_subscription_count() > 0)
@@ -199,7 +216,7 @@ controller_interface::return_type LeaderFollowerController::update(
   // Compute and publish end-effector pose using forward kinematics
   if (pose_pub_ && pose_pub_->get_subscription_count() > 0)
   {
-    Eigen::Matrix4d T_0e = forwardKinematics(q);
+    Eigen::Matrix4d T_0e = kinematics_->forwardKinematics(q);
 
     geometry_msgs::msg::PoseStamped pose_msg;
     pose_msg.header.stamp = time;

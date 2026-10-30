@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <koch_controllers/kinematics/kinematics.h>
+
 #include "controller_interface/controller_interface.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include "hardware_interface/loaned_command_interface.hpp"
@@ -37,6 +40,7 @@ public:
   controller_interface::InterfaceConfiguration state_interface_configuration() const override;
 
 private:
+  std::unique_ptr<const Kinematics> kinematics_;
   void cmdVelCallback(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
   void graspingCallback(const std_msgs::msg::Bool::SharedPtr msg);
 
