@@ -57,6 +57,17 @@ controller_interface::CallbackReturn ClawMachineController::on_configure(
     return controller_interface::CallbackReturn::ERROR;
   }
 
+  kinematics_.reset();
+  try
+  {
+    kinematics_ = std::make_unique<const Kinematics>(get_robot_description(), joint_names_.at(3));
+  }
+  catch (const std::exception & error)
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "Cannot configure follower kinematics: %s", error.what());
+    return controller_interface::CallbackReturn::ERROR;
+  }
+
   // Create /cmd_vel subscriber
   cmd_vel_sub_ = get_node()->create_subscription<geometry_msgs::msg::TwistStamped>(
     "/cmd_vel", rclcpp::SystemDefaultsQoS(),
@@ -242,7 +253,7 @@ controller_interface::return_type ClawMachineController::update(
     desired_twist_reduced << 0.0, 0.0, -scaled_vy, scaled_vx, scaled_vz;
 
     // Get full 6x6 Jacobian, then extract 5x5 for arm joints only
-    Eigen::Matrix<double, 6, 6> Js_full = spaceJacobian(q_full);
+    Eigen::Matrix<double, 6, 6> Js_full = kinematics_->spaceJacobian(q_full);
 
     // Extract rows for constrained twist components and columns for arm joints only
     Eigen::Matrix<double, 5, 5> Js_arm_reduced;

@@ -187,7 +187,7 @@
     </joint>
 
     <joint name="follower_joint4" type="revolute">
-      <origin xyz="0.000125 0.090467 0.002747" rpy="1.57 0 0"/>
+      <origin xyz="0.000125 0.100467 0.002747" rpy="1.57 0 0"/>
       <parent link="follower_link3_1"/>
       <child link="follower_link4_1"/>
       <axis xyz="1.0 0.0 0.0"/>

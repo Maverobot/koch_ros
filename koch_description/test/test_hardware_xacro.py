@@ -20,6 +20,7 @@
 
 """Check hardware selection without loading a plugin or opening any device."""
 
+import math
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -43,6 +44,16 @@ def test_hardware_selection(model, arms, hardware, plugin):
     mappings = {'hardware': hardware, 'follower_port': '/render-only/follower',
                 'leader_port': '/render-only/leader'}
     robot = ET.fromstring(xacro.process_file(str(path), mappings=mappings).toxml())
+    for arm in arms:
+        fourth = robot.find(f'./joint[@name="{arm}_joint4"]')
+        xyz = [float(v) for v in fourth.find('origin').attrib['xyz'].split()]
+        expected_y = 0.100467 if arm == 'follower' else 0.090467
+        assert xyz == pytest.approx([0.000125, expected_y, 0.002747], abs=1e-12)
+        assert fourth.find('origin').attrib['rpy'] == '1.57 0 0'
+        assert fourth.find('axis').attrib['xyz'] == '1.0 0.0 0.0'
+        # x is along the parallel joint axes, not part of their separation.
+        expected_spacing = 0.100504547648 if arm == 'follower' else 0.090508696256
+        assert math.hypot(xyz[1], xyz[2]) == pytest.approx(expected_spacing, abs=1e-9)
     systems = robot.findall('ros2_control')
     assert len(systems) == len(arms)
     names = set()

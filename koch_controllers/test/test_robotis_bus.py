@@ -35,7 +35,7 @@ from control_msgs.action import FollowJointTrajectory
 from controller_manager_msgs.srv import ListControllers, ListHardwareComponents
 from dxl_reply_checks import assert_transient_reply
 from dxl_sim import DynamixelBus
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import PoseStamped, Twist, TwistStamped
 import numpy as np
 import pytest
 from rcl_interfaces.srv import GetParameters
@@ -72,7 +72,7 @@ class DriverSession:
     """Run real controller manager and RSP, with verified simulator ports."""
 
     def __init__(self, directory, follower, leader=None, *, custom=False, launch=None,
-                 hardware='robotis'):
+                 hardware='robotis', forearm_y=None):
         self.directory = directory
         self.processes = []
         self.logs = []
@@ -101,6 +101,15 @@ class DriverSession:
             mappings['leader'] = 'false'
         mappings.update({f'{arm}_port': bus.port for arm, bus in buses.items()})
         urdf = xacro.process_file(str(share / 'urdf' / model), mappings=mappings).toxml()
+        if forearm_y is not None:
+            assert launch is None, 'Description overrides apply only to direct test sessions'
+            robot = ET.fromstring(urdf)
+            origin = robot.find('./joint[@name="follower_joint4"]/origin')
+            xyz = origin.attrib['xyz'].split()
+            xyz[1] = str(forearm_y)
+            origin.set('xyz', ' '.join(xyz))
+            urdf = ET.tostring(robot, encoding='unicode')
+        self.robot = ET.fromstring(urdf)
         port_param = 'usb_port' if hardware == 'legacy' else 'port_name'
         ports = ET.fromstring(urdf).findall(
             f'./ros2_control/hardware/param[@name="{port_param}"]')
@@ -415,13 +424,17 @@ def goals(bus):
             * 0.0015339807878856412 - 3.14159265359 for i in range(1, 7)]
 
 
-def test_leader_follower_controller_offsets_and_scales(tmp_path):
+@pytest.mark.parametrize('forearm_y', [None, 0.090467], ids=['current', 'frozen'])
+def test_leader_follower_controller_offsets_and_scales(tmp_path, forearm_y):
     """Verify LeaderFollowerController scale, offset and remainder(2*pi)."""
     follower = DynamixelBus()
     leader = DynamixelBus()
     session = None
     try:
-        session = DriverSession(tmp_path, follower, leader, custom=True)
+        session = DriverSession(tmp_path, follower, leader, custom=True, forearm_y=forearm_y)
+        poses, twists = [], []
+        session.node.create_subscription(PoseStamped, '/end_effector_pose', poses.append, 10)
+        session.node.create_subscription(Twist, '/end_effector_twist', twists.append, 10)
         session.spawn('joint_state_broadcaster', 'leader_follower_controller')
         config = yaml.safe_load((Path(get_package_share_directory('koch_controllers'))
                                  / 'config' / 'koch_controllers.yaml').read_text())
@@ -436,6 +449,25 @@ def test_leader_follower_controller_offsets_and_scales(tmp_path):
                 2 * math.pi) for value, scale, offset in zip(
                     raw, params['leader_to_follower_scale'], params['leader_to_follower_offset'])]
             session.wait(lambda: np.allclose(goals(follower), expected, atol=0.0016))
+        # These topics are independently queued; await the final stable simulator state.
+        q = np.array(goals(follower))
+        names = ['follower_joint' + suffix for suffix in ['1', '2', '3', '4', '5', '_gripper']]
+        session.wait(lambda: session.messages and np.allclose(
+            [session.messages[-1].position[session.messages[-1].name.index(name)]
+             for name in names], q, atol=1e-9, rtol=0))
+        message = session.messages[-1]
+        dq = np.array([message.velocity[message.name.index(name)] for name in names])
+        expected = gripper_transform(q, session.robot)
+        session.wait(lambda: poses and np.allclose(
+            [poses[-1].pose.position.x, poses[-1].pose.position.y, poses[-1].pose.position.z],
+            expected[:3, 3], atol=1e-9, rtol=0))
+        derivative = (gripper_transform(q + 1e-6 * dq, session.robot)
+                      - gripper_transform(q - 1e-6 * dq, session.robot)) / 2e-6
+        spatial = derivative @ np.linalg.inv(expected)
+        session.wait(lambda: twists and np.allclose(
+            [twists[-1].angular.x, twists[-1].angular.y, twists[-1].angular.z,
+             twists[-1].linear.x, twists[-1].linear.y, twists[-1].linear.z],
+            [spatial[2, 1], spatial[0, 2], spatial[1, 0], *spatial[:3, 3]], atol=1e-8, rtol=0))
         assert session.controllers()['leader_follower_controller'] == 'active'
         assert not any(64 in w['resolved'] or 116 in w['resolved'] for w in leader.writes)
     finally:
@@ -445,12 +477,15 @@ def test_leader_follower_controller_offsets_and_scales(tmp_path):
         leader.close()
 
 
-def gripper_tip(q):
-    """Independent FK oracle using kinematics.h screw axes and reference pose."""
+def gripper_transform(q, robot):
+    """Independent POE oracle with the actual description's forearm y term."""
+    forearm_y = float(robot.find('./joint[@name="follower_joint4"]/origin')
+                      .attrib['xyz'].split()[1])
+    wrist_z = 0.164647 + forearm_y
     axes = [(0, 0, 1), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 1, 0)]
     points = [(0, 0, 0.039), (0, 0, 0.0563), (0, 0.014791, 0.164647),
-              (0, 0.014791, 0.255114), (0, 0.014791, 0.300114),
-              (0, 0.014791, 0.313264)]
+              (0, 0.014791, wrist_z), (0, 0.014791, wrist_z + 0.045),
+              (0, 0.014791, wrist_z + 0.045 + 0.01315)]
     transform = np.eye(4)
     for index, (axis, point, theta) in enumerate(zip(axes, points, q)):
         theta -= math.pi / 2 if index == 2 else 0
@@ -461,15 +496,23 @@ def gripper_tip(q):
         step[:3, :3] = rotation
         step[:3, 3] = (np.eye(3) - rotation) @ point
         transform = transform @ step
-    return (transform @ [0, 0.014791, 0.365264, 1])[:3]
+    reference = np.eye(4)
+    reference[:3, 3] = [0, 0.014791, wrist_z + 0.045 + 0.01315 + 0.052]
+    return transform @ reference
 
 
-def test_claw_machine_initial_pose_motion_and_grasping(tmp_path):
+def gripper_tip(q, robot):
+    """Return the POE gripper tip using the model actually sent to the controller."""
+    return gripper_transform(q, robot)[:3, 3]
+
+
+@pytest.mark.parametrize('forearm_y', [None, 0.090467], ids=['current', 'frozen'])
+def test_claw_machine_initial_pose_motion_and_grasping(tmp_path, forearm_y):
     """Verify ClawMachineController maps +cmd_vel.x to +space vy and Bool to grip."""
     bus = DynamixelBus()
     session = None
     try:
-        session = DriverSession(tmp_path, bus, custom=True)
+        session = DriverSession(tmp_path, bus, custom=True, forearm_y=forearm_y)
         session.spawn('joint_state_broadcaster', 'claw_machine_controller')
         config = yaml.safe_load((Path(get_package_share_directory('koch_controllers'))
                                  / 'config' / 'koch_controllers.yaml').read_text())
@@ -484,7 +527,7 @@ def test_claw_machine_initial_pose_motion_and_grasping(tmp_path):
         session.wait(lambda: abs(goals(bus)[5] + 0.11) < 0.0016)
         grasp.publish(Bool(data=False))
         session.wait(lambda: abs(goals(bus)[5] - 1.46) < 0.0016)
-        before = gripper_tip(goals(bus))
+        before = gripper_tip(goals(bus), session.robot)
         start = time.monotonic()
 
         def moving_positive_y():
@@ -495,7 +538,7 @@ def test_claw_machine_initial_pose_motion_and_grasping(tmp_path):
             return time.monotonic() - start > 0.5
 
         session.wait(moving_positive_y)
-        displacement = gripper_tip(goals(bus)) - before
+        displacement = gripper_tip(goals(bus), session.robot) - before
         assert displacement[1] > 0.001, displacement
         assert session.controllers()['claw_machine_controller'] == 'active'
     finally:

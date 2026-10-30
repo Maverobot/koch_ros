@@ -12,13 +12,14 @@ find_package(controller_interface REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(urdf REQUIRED)
 
 # Add kinematics library
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 add_library(kinematics SHARED src/kinematics/kinematics.cpp)
 target_include_directories(kinematics PUBLIC include)
 target_link_libraries(kinematics PUBLIC Eigen3::Eigen)
-target_link_libraries(kinematics PRIVATE rclcpp::rclcpp)
+target_link_libraries(kinematics PRIVATE urdf::urdf)
 
 # Add leader-follower controller
 add_library(${PROJECT_NAME} SHARED
@@ -57,6 +58,13 @@ install(FILES
 
 if(BUILD_TESTING)
   find_package(ament_cmake_ros REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_kinematics test/test_kinematics.cpp)
+  target_link_libraries(test_kinematics kinematics)
+  ament_add_ros_isolated_gtest(test_controller_kinematics test/test_controller_kinematics.cpp
+    ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+      ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/controller_test_logs)
+  target_link_libraries(test_controller_kinematics ${PROJECT_NAME} kinematics)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   ament_add_ros_isolated_test(test_robotis_bus
     COMMAND ${Python3_EXECUTABLE} -m pytest

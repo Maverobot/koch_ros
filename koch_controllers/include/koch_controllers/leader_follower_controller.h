@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <koch_controllers/kinematics/kinematics.h>
+
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
@@ -32,6 +35,7 @@ public:
   controller_interface::InterfaceConfiguration state_interface_configuration() const override;
 
 private:
+  std::unique_ptr<const Kinematics> kinematics_;
   std::vector<std::string> leader_joint_names_;
   std::vector<std::string> follower_joint_names_;
   std::vector<double> leader_to_follower_offset_;
